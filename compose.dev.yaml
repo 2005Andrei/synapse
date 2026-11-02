@@ -1,0 +1,32 @@
+services:
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile.dev
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./apps/web:/app
+      # Prevent local node_modules from overwriting container's node_modules
+      - /app/node_modules 
+    environment:
+      - VITE_API_URL=http://localhost:8000
+    develop:
+      watch:
+        - action: sync
+          path: ./apps/web
+          target: /app
+          ignore:
+            - node_modules/
+
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile.dev
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./apps/api:/app
+      - /app/.venv
+    environment:
+      - PYTHONUNBUFFERED=1
