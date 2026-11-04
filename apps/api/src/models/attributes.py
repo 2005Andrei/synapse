@@ -8,7 +8,7 @@ class BaseAttributes(BaseModel):
     model_config = ConfigDict(extra="allow")
 
 
-class CompanyAttributes(BaseModel):
+class CompanyAttributes(BaseAttributes):
     organization_type: OrganizationType = OrganizationType.COMPANY
     legal_form: str | None = None
     jurisdiction: str | None = None
@@ -21,7 +21,7 @@ class CompanyAttributes(BaseModel):
     currency: str | None = None
 
 
-class PersonAttributes(BaseModel):
+class PersonAttributes(BaseAttributes):
     date_of_birth: str | None = None
     nationality: str | None = None
     occupations: list[str] | None = Field(default_factory=list)

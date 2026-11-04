@@ -1,0 +1,521 @@
+
+{
+  "entities": [
+    {
+      "id": "00000000-0000-4000-8000-000000000008",
+      "type": "Person",
+      "description": "Local councillor and lawyer, chair of the municipal procurement committee.",
+      "aliases": ["Elena M."],
+      "attributes": {
+        "date_of_birth": "1982-11-02",
+        "nationality": "Romanian",
+        "occupations": ["Lawyer"],
+        "public_roles": ["Local councillor", "Procurement committee chair"],
+        "education": "University of Bucharest, Faculty of Law"
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000009",
+      "type": "Organization",
+      "description": "Civil engineering and construction consultancy operating in Brașov County.",
+      "aliases": ["Carpathia Engineering"],
+      "attributes": {
+        "organization_type": "Company",
+        "legal_form": "SRL",
+        "jurisdiction": "RO",
+        "cui": "87654321",
+        "registration_number": "J08/2345/2018",
+        "incorporation_date": "2018-07-19",
+        "status": "Active",
+        "industry": ["Engineering", "Construction consultancy"],
+        "revenue": 1920000.0,
+        "currency": "RON",
+        "caen_code": "7112"
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000010",
+      "type": "Person",
+      "description": "Managing director of Carpathia Engineering SRL.",
+      "aliases": ["Mihai D."],
+      "attributes": {
+        "date_of_birth": "1975-04-23",
+        "nationality": "Romanian",
+        "occupations": ["Civil engineer", "Business administrator"],
+        "public_roles": ["Administrator, Carpathia Engineering SRL"]
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000011",
+      "type": "Organization",
+      "description": "Regional supplier of construction materials.",
+      "aliases": ["Transilvania Materials"],
+      "attributes": {
+        "organization_type": "Company",
+        "legal_form": "SRL",
+        "jurisdiction": "RO",
+        "cui": "76543210",
+        "registration_number": "J08/3456/2019",
+        "incorporation_date": "2019-09-04",
+        "status": "Active",
+        "industry": ["Construction materials", "Wholesale"],
+        "revenue": 3270000.0,
+        "currency": "RON",
+        "caen_code": "4673"
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000012",
+      "type": "Person",
+      "description": "Shareholder and administrator of Transilvania Materials SRL.",
+      "aliases": ["Radu Ionescu"],
+      "attributes": {
+        "date_of_birth": "1980-01-17",
+        "nationality": "Romanian",
+        "occupations": ["Entrepreneur"],
+        "public_roles": ["Administrator, Transilvania Materials SRL"]
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000013",
+      "type": "Organization",
+      "description": "Municipal public school whose facilities were subject to renovation contracts.",
+      "aliases": ["Școala Gimnazială Valea Exemplului"],
+      "attributes": {
+        "organization_type": "Institution",
+        "jurisdiction": "RO",
+        "status": "Active",
+        "level": "local",
+        "institution_type": "Public education"
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000014",
+      "type": "Document",
+      "description": "Corporate filing recording a change in shareholders.",
+      "aliases": ["Shareholder declaration 2022"],
+      "attributes": {
+        "document_type": "Trade registry filing",
+        "filing_number": "R-2022-0814",
+        "filing_date": "2022-08-14",
+        "issuing_authority": "ONRC",
+        "language": "ro"
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000015",
+      "type": "Document",
+      "description": "Public declaration of assets and interests submitted by Elena Marinescu.",
+      "aliases": ["Declarație de avere 2024"],
+      "attributes": {
+        "document_type": "Asset declaration",
+        "declaration_year": 2024,
+        "filing_date": "2024-06-10",
+        "issuing_authority": "Valea Exemplului Local Council",
+        "language": "ro"
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000016",
+      "type": "Asset",
+      "description": "Commercial property located in Brașov County.",
+      "aliases": ["Warehouse property"],
+      "attributes": {
+        "asset_type": "Commercial real estate",
+        "address": "Industrial Area, Brașov",
+        "area_sqm": 850,
+        "acquisition_year": 2021,
+        "estimated_value": 680000,
+        "currency": "RON"
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000017",
+      "type": "Event",
+      "description": "Public procurement procedure for the renovation of a local school.",
+      "aliases": ["School renovation procurement"],
+      "attributes": {
+        "event_type": "Public procurement",
+        "procedure_id": "SCN1098765",
+        "start_date": "2023-11-15",
+        "end_date": "2024-02-20",
+        "status": "Awarded"
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000018",
+      "type": "DigitalTrail",
+      "description": "Professional networking profile attributed to Mihai Dumitrescu.",
+      "aliases": null,
+      "attributes": {
+        "trail_type": "SocialProfile",
+        "platform": "LinkedIn",
+        "handle": "mihai-dumitrescu-engineering",
+        "url": "https://linkedin.example.com/in/mihai-dumitrescu-engineering",
+        "followers": 820
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000019",
+      "type": "LegalCase",
+      "description": "Administrative dispute concerning a municipal procurement procedure.",
+      "aliases": ["Procurement dispute 2024"],
+      "attributes": {
+        "case_number": "1234/62/2024",
+        "court": "Brașov Tribunal",
+        "case_type": "Administrative litigation",
+        "filing_date": "2024-05-17",
+        "status": "Pending"
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000020",
+      "type": "Location",
+      "description": "Industrial area in Brașov County.",
+      "aliases": ["Zona Industrială Brașov"],
+      "attributes": {
+        "country": "Romania",
+        "region": "Brașov County",
+        "city": "Brașov",
+        "latitude": 45.6500,
+        "longitude": 25.6100,
+        "location_type": "Industrial district"
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "10000000-0000-4000-8000-000000000004",
+      "type": "Official_Registry",
+      "title": "Trade registry extract – Carpathia Engineering SRL",
+      "publisher": "ONRC",
+      "url": "https://registry.example.ro/firms/87654321",
+      "content": "Carpathia Engineering SRL, CUI 87654321. Administrator: Mihai Dumitrescu. Registered office: Brașov. Status: Active.",
+      "language": "ro"
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000005",
+      "type": "Official_Registry",
+      "title": "Trade registry extract – Transilvania Materials SRL",
+      "publisher": "ONRC",
+      "url": "https://registry.example.ro/firms/76543210",
+      "content": "Transilvania Materials SRL, CUI 76543210. Administrator: Radu Ionescu. Registered office: Brașov County. Status: Active.",
+      "language": "ro"
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000006",
+      "type": "Government_Document",
+      "title": "Declaration of assets and interests – Elena Marinescu",
+      "publisher": "Valea Exemplului Local Council",
+      "url": "https://declarations.example.ro/2024/elena-marinescu",
+      "content": "Elena Marinescu submitted an asset declaration on 10 June 2024. The declaration lists a residential property and bank deposits. No ownership interest in Nordic Build SRL is declared.",
+      "language": "ro"
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000007",
+      "type": "Government_Document",
+      "title": "Procurement procedure – SCN1098765",
+      "publisher": "SEAP",
+      "url": "https://seap.example.ro/procedure/SCN1098765",
+      "content": "Valea Exemplului Town Hall initiated a public procurement procedure for school renovation on 15 November 2023. Nordic Build SRL submitted a bid and was subsequently awarded the contract.",
+      "language": "ro"
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000008",
+      "type": "Official_Registry",
+      "title": "Shareholder filing – Transilvania Materials SRL",
+      "publisher": "ONRC",
+      "url": "https://registry.example.ro/filings/R-2022-0814",
+      "content": "Filing R-2022-0814 records Radu Ionescu as shareholder and administrator of Transilvania Materials SRL.",
+      "language": "ro"
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000009",
+      "type": "News_Article",
+      "title": "Construction suppliers linked to regional public works",
+      "publisher": "Brașov Monitor",
+      "url": "https://news.example.ro/construction-suppliers",
+      "content": "Nordic Build SRL and Transilvania Materials SRL have both appeared in regional public procurement records. Transilvania Materials has supplied construction materials to several contractors in Brașov County. The companies have not publicly confirmed a corporate relationship.",
+      "language": "ro"
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000010",
+      "type": "Government_Document",
+      "title": "Contract award – municipal school renovation",
+      "publisher": "SEAP",
+      "url": "https://seap.example.ro/contracts/C-2023-0198",
+      "content": "Contract C-2023/0198 was awarded to Carpathia Engineering SRL for technical consultancy and project supervision. Contracting authority: Valea Exemplului Town Hall. Contract value: 185000 RON.",
+      "language": "ro"
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000011",
+      "type": "Court_Document",
+      "title": "Statement of claim – case 1234/62/2024",
+      "publisher": "Brașov Tribunal",
+      "url": "https://court.example.ro/cases/1234-62-2024",
+      "content": "An unsuccessful bidder filed an administrative complaint concerning procurement procedure SCN1098765. The claimant disputes the evaluation of technical criteria and requests review of the award decision. The filing does not establish wrongdoing by the contracting authority or successful bidder.",
+      "language": "ro"
+    }
+  ],
+  "claims": [
+    {
+      "id": "20000000-0000-4000-8000-000000000006",
+      "type": "Relationship",
+      "subject_ids": "00000000-0000-4000-8000-000000000010",
+      "predicate": "Director_Of",
+      "claim_text": "Mihai Dumitrescu is the administrator of Carpathia Engineering SRL.",
+      "reference_ids": ["00000000-0000-4000-8000-000000000009"],
+      "source_ids": ["10000000-0000-4000-8000-000000000004"],
+      "claim_status": "Verified",
+      "confidence": 0.98
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000007",
+      "type": "Relationship",
+      "subject_ids": "00000000-0000-4000-8000-000000000012",
+      "predicate": "Director_Of",
+      "claim_text": "Radu Ionescu is the administrator of Transilvania Materials SRL.",
+      "reference_ids": ["00000000-0000-4000-8000-000000000011"],
+      "source_ids": ["10000000-0000-4000-8000-000000000005"],
+      "claim_status": "Verified",
+      "confidence": 0.98
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000008",
+      "type": "Relationship",
+      "subject_ids": "00000000-0000-4000-8000-000000000012",
+      "predicate": "Shareholder_In",
+      "claim_text": "Radu Ionescu is recorded as a shareholder of Transilvania Materials SRL.",
+      "reference_ids": ["00000000-0000-4000-8000-000000000011"],
+      "source_ids": ["10000000-0000-4000-8000-000000000008"],
+      "claim_status": "Verified",
+      "confidence": 0.99
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000009",
+      "type": "Relationship",
+      "subject_ids": "00000000-0000-4000-8000-000000000011",
+      "predicate": "Supplied_Materials_To",
+      "claim_text": "Transilvania Materials SRL supplied construction materials to Nordic Build SRL.",
+      "reference_ids": ["00000000-0000-4000-8000-000000000003"],
+      "source_ids": ["10000000-0000-4000-8000-000000000009"],
+      "claim_status": "Reported",
+      "confidence": 0.76
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000010",
+      "type": "Relationship",
+      "subject_ids": "00000000-0000-4000-8000-000000000009",
+      "predicate": "Based_In",
+      "claim_text": "Carpathia Engineering SRL has its registered office in Brașov.",
+      "reference_ids": ["00000000-0000-4000-8000-000000000006"],
+      "source_ids": ["10000000-0000-4000-8000-000000000004"],
+      "claim_status": "Verified",
+      "confidence": 0.99
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000011",
+      "type": "Relationship",
+      "subject_ids": "00000000-0000-4000-8000-000000000011",
+      "predicate": "Based_In",
+      "claim_text": "Transilvania Materials SRL operates from Brașov County.",
+      "reference_ids": ["00000000-0000-4000-8000-000000000006"],
+      "source_ids": ["10000000-0000-4000-8000-000000000005"],
+      "claim_status": "Verified",
+      "confidence": 0.96
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000012",
+      "type": "Relationship",
+      "subject_ids": "00000000-0000-4000-8000-000000000004",
+      "predicate": "Contracting_Authority_For",
+      "claim_text": "Valea Exemplului Town Hall acted as the contracting authority for procedure SCN1098765.",
+      "reference_ids": ["00000000-0000-4000-8000-000000000017"],
+      "source_ids": ["10000000-0000-4000-8000-000000000007"],
+      "claim_status": "Verified",
+      "confidence": 0.99
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000013",
+      "type": "Relationship",
+      "subject_ids": "00000000-0000-4000-8000-000000000017",
+      "predicate": "Awarded_To",
+      "claim_text": "Procurement procedure SCN1098765 resulted in an award to Nordic Build SRL.",
+      "reference_ids": ["00000000-0000-4000-8000-000000000003"],
+      "source_ids": ["10000000-0000-4000-8000-000000000007"],
+      "claim_status": "Verified",
+      "confidence": 0.99
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000014",
+      "type": "Relationship",
+      "subject_ids": "00000000-0000-4000-8000-000000000009",
+      "predicate": "Won_Contract",
+      "claim_text": "Carpathia Engineering SRL was awarded contract C-2023/0198 for technical consultancy and project supervision.",
+      "reference_ids": ["00000000-0000-4000-8000-000000000017"],
+      "source_ids": ["10000000-0000-4000-8000-000000000010"],
+      "claim_status": "Verified",
+      "confidence": 0.97
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000015",
+      "type": "Relationship",
+      "subject_ids": "00000000-0000-4000-8000-000000000008",
+      "predicate": "Chaired",
+      "claim_text": "Elena Marinescu chaired the municipal procurement committee.",
+      "reference_ids": ["00000000-0000-4000-8000-000000000004"],
+      "source_ids": ["10000000-0000-4000-8000-000000000002"],
+      "claim_status": "Reported",
+      "confidence": 0.88
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000016",
+      "type": "Relationship",
+      "subject_ids": "00000000-0000-4000-8000-000000000008",
+      "predicate": "Submitted",
+      "claim_text": "Elena Marinescu submitted an asset declaration in June 2024.",
+      "reference_ids": ["00000000-0000-4000-8000-000000000015"],
+      "source_ids": ["10000000-0000-4000-8000-000000000006"],
+      "claim_status": "Verified",
+      "confidence": 0.99
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000017",
+      "type": "Relationship",
+      "subject_ids": "00000000-0000-4000-8000-000000000008",
+      "predicate": "Participated_In",
+      "claim_text": "Elena Marinescu held a public role associated with the municipal procurement process.",
+      "reference_ids": ["00000000-0000-4000-8000-000000000017"],
+      "source_ids": ["10000000-0000-4000-8000-000000000002"],
+      "claim_status": "Reported",
+      "confidence": 0.82
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000018",
+      "type": "Relationship",
+      "subject_ids": "00000000-0000-4000-8000-000000000016",
+      "predicate": "Located_In",
+      "claim_text": "The commercial warehouse property is located in the Brașov industrial area.",
+      "reference_ids": ["00000000-0000-4000-8000-000000000020"],
+      "source_ids": ["10000000-0000-4000-8000-000000000006"],
+      "claim_status": "Unverified",
+      "confidence": 0.55
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000019",
+      "type": "Relationship",
+      "subject_ids": "00000000-0000-4000-8000-000000000003",
+      "predicate": "Owns",
+      "claim_text": "Nordic Build SRL is associated with the acquisition of a commercial warehouse property in 2021.",
+      "reference_ids": ["00000000-0000-4000-8000-000000000016"],
+      "source_ids": ["10000000-0000-4000-8000-000000000009"],
+      "claim_status": "Unverified",
+      "confidence": 0.42
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000020",
+      "type": "Relationship",
+      "subject_ids": "00000000-0000-4000-8000-000000000010",
+      "predicate": "Owns_Account",
+      "claim_text": "A LinkedIn profile appears to belong to Mihai Dumitrescu.",
+      "reference_ids": ["00000000-0000-4000-8000-000000000018"],
+      "source_ids": ["10000000-0000-4000-8000-000000000009"],
+      "claim_status": "Reported",
+      "confidence": 0.72
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000021",
+      "type": "Relationship",
+      "subject_ids": "00000000-0000-4000-8000-000000000019",
+      "predicate": "Concerns",
+      "claim_text": "Case 1234/62/2024 concerns the procurement procedure SCN1098765.",
+      "reference_ids": ["00000000-0000-4000-8000-000000000017"],
+      "source_ids": ["10000000-0000-4000-8000-000000000011"],
+      "claim_status": "Verified",
+      "confidence": 0.99
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000022",
+      "type": "Relationship",
+      "subject_ids": "00000000-0000-4000-8000-000000000003",
+      "predicate": "Party_To",
+      "claim_text": "Nordic Build SRL was named as the successful bidder in the procurement procedure under administrative review.",
+      "reference_ids": ["00000000-0000-4000-8000-000000000019"],
+      "source_ids": ["10000000-0000-4000-8000-000000000011"],
+      "claim_status": "Reported",
+      "confidence": 0.91
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000023",
+      "type": "Fact",
+      "subject_ids": "00000000-0000-4000-8000-000000000009",
+      "predicate": "Revenue",
+      "claim_text": "Carpathia Engineering SRL reported annual revenue of 1,920,000 RON.",
+      "reference_ids": [],
+      "source_ids": ["10000000-0000-4000-8000-000000000004"],
+      "claim_status": "Reported",
+      "confidence": 0.75
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000024",
+      "type": "Fact",
+      "subject_ids": "00000000-0000-4000-8000-000000000011",
+      "predicate": "Revenue",
+      "claim_text": "Transilvania Materials SRL reported annual revenue of 3,270,000 RON.",
+      "reference_ids": [],
+      "source_ids": ["10000000-0000-4000-8000-000000000005"],
+      "claim_status": "Reported",
+      "confidence": 0.75
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000025",
+      "type": "Hypothesis",
+      "subject_ids": [
+        "00000000-0000-4000-8000-000000000003",
+        "00000000-0000-4000-8000-000000000011"
+      ],
+      "predicate": "Possible_Business_Relationship",
+      "claim_text": "Nordic Build SRL and Transilvania Materials SRL may have a supplier relationship. The available reporting does not establish the frequency, value, or contractual terms of any transactions.",
+      "reference_ids": [],
+      "source_ids": ["10000000-0000-4000-8000-000000000009"],
+      "claim_status": "Inferred",
+      "confidence": 0.48
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000026",
+      "type": "Hypothesis",
+      "subject_ids": [
+        "00000000-0000-4000-8000-000000000010",
+        "00000000-0000-4000-8000-000000000001"
+      ],
+      "predicate": "Possible_Professional_Connection",
+      "claim_text": "Mihai Dumitrescu and Andrei Popescu may have a professional connection through their respective companies operating in the same regional construction market. No direct personal or corporate relationship has been established.",
+      "reference_ids": [
+        "00000000-0000-4000-8000-000000000009",
+        "00000000-0000-4000-8000-000000000003"
+      ],
+      "source_ids": ["10000000-0000-4000-8000-000000000009"],
+      "claim_status": "Unverified",
+      "confidence": 0.25
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000027",
+      "type": "Anomaly",
+      "subject_ids": "00000000-0000-4000-8000-000000000003",
+      "predicate": "Multiple_Public_Contracts",
+      "claim_text": "Nordic Build SRL appears in multiple public procurement records in the same municipality. This is a pattern worth reviewing, but repeated awards alone do not indicate irregularity.",
+      "reference_ids": [
+        "00000000-0000-4000-8000-000000000005",
+        "00000000-0000-4000-8000-000000000017"
+      ],
+      "source_ids": [
+        "10000000-0000-4000-8000-000000000002",
+        "10000000-0000-4000-8000-000000000003",
+        "10000000-0000-4000-8000-000000000007"
+      ],
+      "claim_status": "Inferred",
+      "confidence": 0.83
+    }
+  ]
+}
+

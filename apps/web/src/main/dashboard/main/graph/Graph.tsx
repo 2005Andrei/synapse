@@ -1,3 +1,389 @@
+import { useState, useMemo, useCallback, useRef, useEffect } from "react";
+import ForceGraph3D from "react-force-graph-3d";
+import * as THREE from "three";
+import MOCK_DATA from "./mock_data.json";
+
+import { createNodeObject } from "./nodeRenderer";
+import {
+    createLinkThreeObject,
+    updateLinkPosition,
+    getLinkId,
+    getLinkColor,
+    getLinkWidth,
+} from "./linkRenderer";
+
+const ENTITY_COLORS = {
+    Person: "#ef476f",
+    Organization: "#118ab2",
+    Document: "#ffd166",
+    GeographicTies: "#06d6a0",
+    DigitalTrail: "#9d4edd",
+    Default: "#ffffff",
+};
+
+function transformData(data) {
+    if (!data?.entities) return { nodes: [], links: [] };
+
+    const nodes = data.entities.map((e) => ({
+        id: e.id,
+        type: e.type,
+        label: e.aliases?.length ? e.aliases[0] : `Unnamed ${e.type}`,
+        description: e.description,
+        attributes: e.attributes,
+        color: ENTITY_COLORS[e.type] || ENTITY_COLORS.Default,
+        val: 5,
+    }));
+
+    const validNodeIds = new Set(nodes.map((n) => n.id));
+
+    const links = [];
+    (data.claims || []).forEach((claim) => {
+        const sources = Array.isArray(claim.subject_ids)
+            ? claim.subject_ids
+            : [claim.subject_ids].filter(Boolean);
+        const targets = Array.isArray(claim.reference_ids)
+            ? claim.reference_ids
+            : [];
+        const label = claim.predicate ? claim.predicate.replace(/_/g, " ") : "";
+
+        if (sources.length > 0 && targets.length > 0) {
+            sources.forEach((src) => {
+                targets.forEach((tgt) => {
+                    if (validNodeIds.has(src) && validNodeIds.has(tgt)) {
+                        links.push({
+                            source: src,
+                            target: tgt,
+                            label,
+                            confidence: claim.confidence ?? 1.0,
+                        });
+                    }
+                });
+            });
+        } else if (sources.length === 2 && targets.length === 0) {
+            if (validNodeIds.has(sources[0]) && validNodeIds.has(sources[1])) {
+                links.push({
+                    source: sources[0],
+                    target: sources[1],
+                    label,
+                    confidence: claim.confidence ?? 1.0,
+                });
+            }
+        }
+    });
+
+    const degreeMap = new Map();
+    links.forEach((l) => {
+        degreeMap.set(l.source, (degreeMap.get(l.source) || 0) + 1);
+        degreeMap.set(l.target, (degreeMap.get(l.target) || 0) + 1);
+    });
+    nodes.forEach((n) => {
+        n.val += degreeMap.get(n.id) || 0;
+    });
+
+    return { nodes, links };
+}
+
 export default function Graph() {
-    return <div className="h-full w-full"></div>;
+    const graphRef = useRef(null);
+    const minimapCanvasRef = useRef(null);
+    const isDraggingMinimap = useRef(false);
+    const lastMousePos = useRef({ x: 0, y: 0 });
+
+    const [selectedNode, setSelectedNode] = useState(null);
+    const [hoveredNode, setHoveredNode] = useState(null);
+
+    const [toggledLinks, setToggledLinks] = useState(() => new Set());
+    const [hoveredLinkId, setHoveredLinkId] = useState(null);
+
+    const graphData = useMemo(() => transformData(MOCK_DATA), []);
+
+    useEffect(() => {
+        let animationFrameId;
+
+        const renderMinimap = () => {
+            const canvas = minimapCanvasRef.current;
+            if (!canvas || !graphRef.current) {
+                animationFrameId = requestAnimationFrame(renderMinimap);
+                return;
+            }
+
+            const ctx = canvas.getContext("2d");
+            const w = canvas.width;
+            const h = canvas.height;
+            const centerX = w / 2;
+            const centerY = h / 2;
+
+            ctx.clearRect(0, 0, w, h);
+
+            const camera = graphRef.current.camera();
+            const controls = graphRef.current.controls();
+            const target = controls?.target || new THREE.Vector3(0, 0, 0);
+            const nodes = graphData.nodes;
+
+            let maxCoord = 250;
+            nodes.forEach((n) => {
+                if (n.x !== undefined && n.z !== undefined) {
+                    maxCoord = Math.max(maxCoord, Math.abs(n.x), Math.abs(n.z));
+                }
+            });
+            const scale = (w / 2 - 16) / maxCoord;
+
+            ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, w * 0.44, 0, Math.PI * 2);
+            ctx.arc(centerX, centerY, w * 0.25, 0, Math.PI * 2);
+            ctx.stroke();
+
+            nodes.forEach((node) => {
+                if (node.x === undefined || node.z === undefined) return;
+                const px = centerX + node.x * scale;
+                const py = centerY + node.z * scale;
+
+                ctx.fillStyle = node.color || "#ffffff";
+                ctx.beginPath();
+                ctx.arc(
+                    px,
+                    py,
+                    selectedNode?.id === node.id ? 4 : 2,
+                    0,
+                    Math.PI * 2,
+                );
+                ctx.fill();
+            });
+
+            if (camera) {
+                const camX = centerX + camera.position.x * scale;
+                const camY = centerY + camera.position.z * scale;
+                const tgtX = centerX + target.x * scale;
+                const tgtY = centerY + target.z * scale;
+
+                const targetAngle = Math.atan2(tgtY - camY, tgtX - camX);
+                const fovSpread = 0.45;
+                const viewDist = 26;
+
+                ctx.fillStyle = "rgba(0, 210, 255, 0.18)";
+                ctx.beginPath();
+                ctx.moveTo(camX, camY);
+                ctx.arc(
+                    camX,
+                    camY,
+                    viewDist,
+                    targetAngle - fovSpread,
+                    targetAngle + fovSpread,
+                );
+                ctx.closePath();
+                ctx.fill();
+
+                ctx.fillStyle = "#00d2ff";
+                ctx.beginPath();
+                ctx.arc(camX, camY, 3.5, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.strokeStyle = "rgba(255, 255, 255, 0.4)";
+                ctx.beginPath();
+                ctx.arc(tgtX, tgtY, 3, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+
+            animationFrameId = requestAnimationFrame(renderMinimap);
+        };
+
+        animationFrameId = requestAnimationFrame(renderMinimap);
+        return () => cancelAnimationFrame(animationFrameId);
+    }, [graphData, selectedNode]);
+
+    const handleMinimapMouseDown = (e) => {
+        isDraggingMinimap.current = true;
+        lastMousePos.current = { x: e.clientX, y: e.clientY };
+    };
+
+    useEffect(() => {
+        const handleMouseMove = (e) => {
+            if (!isDraggingMinimap.current || !graphRef.current) return;
+
+            const deltaX = e.clientX - lastMousePos.current.x;
+            const deltaY = e.clientY - lastMousePos.current.y;
+            lastMousePos.current = { x: e.clientX, y: e.clientY };
+
+            const camera = graphRef.current.camera();
+            const controls = graphRef.current.controls();
+            if (!camera || !controls) return;
+
+            const distance = camera.position.distanceTo(controls.target);
+            const panFactor = Math.max(distance * 0.0018, 0.4);
+
+            const right = new THREE.Vector3();
+            const up = new THREE.Vector3();
+            camera.matrixWorld.extractBasis(right, up, new THREE.Vector3());
+
+            const translation = new THREE.Vector3()
+                .addScaledVector(right, -deltaX * panFactor)
+                .addScaledVector(up, deltaY * panFactor);
+
+            camera.position.add(translation);
+            controls.target.add(translation);
+            controls.update();
+        };
+
+        const handleMouseUp = () => {
+            isDraggingMinimap.current = false;
+        };
+
+        window.addEventListener("mousemove", handleMouseMove);
+        window.addEventListener("mouseup", handleMouseUp);
+        return () => {
+            window.removeEventListener("mousemove", handleMouseMove);
+            window.removeEventListener("mouseup", handleMouseUp);
+        };
+    }, []);
+
+    const handleNodeClick = useCallback((node) => {
+        setSelectedNode((prev) => (prev?.id === node.id ? null : node));
+
+        if (!graphRef.current) return;
+
+        const cameraDistance = 180;
+        const hyp = Math.hypot(node.x || 0, node.y || 0, node.z || 0);
+        const distRatio = hyp === 0 ? 1 : 1 + cameraDistance / hyp;
+
+        graphRef.current.cameraPosition(
+            {
+                x: (node.x || 0) * distRatio,
+                y: (node.y || 0) * distRatio,
+                z: (node.z || 0) * distRatio + (hyp === 0 ? cameraDistance : 0),
+            },
+            node,
+            1500,
+        );
+    }, []);
+
+    const handleLinkClick = useCallback((link) => {
+        const key = `${getLinkId(link.source)}-${getLinkId(link.target)}`;
+        setToggledLinks((prev) => {
+            const next = new Set(prev);
+            if (next.has(key)) {
+                next.delete(key);
+            } else {
+                next.add(key);
+            }
+            return next;
+        });
+    }, []);
+
+    const handleLinkHover = useCallback((link) => {
+        setHoveredLinkId(
+            link ? `${getLinkId(link.source)}-${getLinkId(link.target)}` : null,
+        );
+    }, []);
+
+    return (
+        <div className="relative w-screen h-screen bg-[#050505] overflow-hidden">
+            <ForceGraph3D
+                ref={graphRef}
+                graphData={graphData}
+                backgroundColor="#050505"
+                onNodeClick={handleNodeClick}
+                onNodeHover={setHoveredNode}
+                nodeThreeObject={(node) =>
+                    createNodeObject(
+                        node,
+                        selectedNode?.id === node.id,
+                        hoveredNode?.id === node.id,
+                    )
+                }
+                onLinkClick={handleLinkClick}
+                onLinkHover={handleLinkHover}
+                linkWidth={(link) =>
+                    getLinkWidth(link, selectedNode?.id, null, hoveredLinkId)
+                }
+                linkColor={(link) =>
+                    getLinkColor(link, selectedNode?.id, null, hoveredLinkId)
+                }
+                linkOpacity={0.7}
+                linkDirectionalParticles={(link) => {
+                    const src = getLinkId(link.source);
+                    const tgt = getLinkId(link.target);
+                    return selectedNode?.id === src || selectedNode?.id === tgt
+                        ? 4
+                        : 0;
+                }}
+                linkDirectionalParticleSpeed={0.007}
+                linkDirectionalParticleWidth={1.4}
+                linkThreeObjectExtend={true}
+                linkThreeObject={(link) => {
+                    const key = `${getLinkId(link.source)}-${getLinkId(link.target)}`;
+                    const isVisible =
+                        hoveredLinkId === key || toggledLinks.has(key);
+                    return createLinkThreeObject(link, isVisible);
+                }}
+                linkPositionUpdate={updateLinkPosition}
+            />
+
+            {/* Bottom-Left Interactive Pan Minimap */}
+            <div className="absolute bottom-6 left-6 w-[170px] h-[170px] bg-[rgba(15,15,20,0.85)] border border-white/15 rounded-xl backdrop-blur-[12px] shadow-[0_8px_32px_rgba(0,0,0,0.5)] z-10 flex flex-col items-center justify-center select-none">
+                <div className="absolute top-2 left-[10px] text-[9px] font-bold tracking-[0.8px] text-white/50 uppercase font-mono pointer-events-none">
+                    Minimap (Pan ✥)
+                </div>
+
+                <canvas
+                    ref={minimapCanvasRef}
+                    width={150}
+                    height={150}
+                    onMouseDown={handleMinimapMouseDown}
+                    className="cursor-move block mt-2.5"
+                />
+            </div>
+
+            {/* Floating Details Sidebar */}
+            {selectedNode && (
+                <div className="absolute top-5 right-5 w-80 bg-[rgba(15,15,20,0.95)] border border-[#333] rounded-lg p-5 text-[#ececec] font-mono backdrop-blur-[10px] z-10 max-h-[calc(100vh-40px)] overflow-y-auto">
+                    <div className="flex justify-between items-center mb-[15px]">
+                        <h3
+                            className="m-0"
+                            style={{ color: selectedNode.color }}
+                        >
+                            {selectedNode.label}
+                        </h3>
+                        <button
+                            onClick={() => setSelectedNode(null)}
+                            className="bg-transparent border-none text-[#888] cursor-pointer text-[18px]"
+                        >
+                            ×
+                        </button>
+                    </div>
+
+                    <div className="text-[12px] text-[#aaa] mb-[15px] border-b border-[#333] pb-[15px]">
+                        {selectedNode.description}
+                    </div>
+
+                    <div className="text-[12px]">
+                        <div
+                            className="mb-2 uppercase tracking-[1px]"
+                            style={{ color: selectedNode.color }}
+                        >
+                            Attributes
+                        </div>
+                        {Object.entries(selectedNode.attributes || {}).map(
+                            ([key, value]) => (
+                                <div
+                                    key={key}
+                                    className="mb-[6px] flex flex-col"
+                                >
+                                    <span className="text-[#888]">
+                                        {key.replace(/_/g, " ")}:
+                                    </span>
+                                    <span className="text-white">
+                                        {Array.isArray(value)
+                                            ? value.join(", ")
+                                            : String(value)}
+                                    </span>
+                                </div>
+                            ),
+                        )}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
 }

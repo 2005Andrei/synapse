@@ -4,7 +4,7 @@ from models.types import ClaimStatus, ClaimType, EntityType, Predicate, SourceTy
 from pydantic import BaseModel, Field, ConfigDict, model_validator
 from enum import Enum
 
-from uuid import UUID, uuid4, uuid6
+from uuid import UUID, uuid4
 
 
 class Entity(BaseModel):
@@ -53,4 +53,4 @@ class Claim(BaseModel):
 
     source: list[Source]
     claim_status: ClaimStatus = ClaimStatus.UNVERIFIED
-    confidence: float = Field(..., default=None, ge=0, le=1)
+    confidence: float = Field(default=None, ge=0, le=1)
