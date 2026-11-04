@@ -39,7 +39,7 @@ const initial: Win[] = [
         x: 0.72,
         y: 0,
         width: 0.25,
-        height: 1 / 1.2,
+        height: 1 / 1.05,
         ...base,
     },
 ];

@@ -30,12 +30,12 @@ export default function DashboardNavbar() {
                 </div>
             </div>
 
-            <div className="hidden md:flex order-3 lg:order-2 w-full lg:w-auto lg:flex-1 lg:mx-12 items-center border-b border-gray-700/80 pb-1.5 mt-1 lg:mt-0">
+            <div className="hidden md:flex order-3 lg:order-2 w-full lg:w-auto lg:flex-1 lg:mx-12 items-center border-b border-gray-700/80 pb-1.5 mt-1 lg:mt-0 max-w-[500px]">
                 <span className="text-primary mr-3 ">/</span>
                 <input
                     type="text"
                     placeholder="search entity, company, person.."
-                    className="bg-transparent border-none outline-none w-full text-xs placeholder-gray-600 focus:ring-0 uppercase"
+                    className="bg-transparent border-none outline-none w-full text-xs placeholder-gray-600 focus:ring-0 uppercase max-width-[300px]"
                 />
             </div>
 

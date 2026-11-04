@@ -38,7 +38,7 @@ export default function DashboardMain() {
     }, []);
     return (
         <main
-            className="w-full z-9999 flex-1 overflow-clip"
+            className="w-full z-9999 flex-1 overflow-clip flex flex-row"
             id="desktop"
             ref={deskRef}
         >
