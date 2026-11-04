@@ -5,10 +5,10 @@ import { DashboardProvider } from "./providers/DashboardContext";
 export default function Dashboard() {
     return (
         <DashboardProvider>
-            <div className="w-full h-screen font-sans selection:text-foreground">
+            <main className="w-full h-screen font-sans selection:text-foreground flex flex-col">
                 <DashboardNavbar />
                 <DashboardMain />
-            </div>
+            </main>
         </DashboardProvider>
     );
 }

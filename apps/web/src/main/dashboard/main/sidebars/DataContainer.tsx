@@ -4,5 +4,5 @@ export default function DataContainer() {
     // container
     const activeView = useSidebar();
 
-    return <></>;
+    return <>data container</>;
 }
