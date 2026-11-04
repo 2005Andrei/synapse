@@ -26,17 +26,23 @@ type Store = {
     patch: (id: string, p: Partial<Win>) => void;
     toggleMin: (id: string) => void;
     toggleMax: (id: string) => void;
+    snapEnabled: boolean;
+    setSnapEnabled: (on: boolean) => void;
+    toggleSnap: () => void;
 };
 
 const base = { z: 0, minimized: false, maximized: false, snap: null };
+const pageWidth = window.innerWidth;
+const pageHeight = window.innerHeight;
+const dataWidth = window.innerWidth * 0.25;
 const initial: Win[] = [
     {
         id: "data",
         title: "Data",
-        x: 400,
-        y: 330,
-        width: 240,
-        height: 140,
+        x: pageWidth - dataWidth - 40,
+        y: 0,
+        width: dataWidth,
+        height: pageHeight / 1.2,
         ...base,
     },
 ];
@@ -48,7 +54,31 @@ export const useWM = create<Store>((set) => ({
     desk: { w: 0, h: 0 },
     preview: null,
 
-    setDesk: (w, h) => set({ desk: { w, h } }),
+    setDesk: (w, h) =>
+        set((s) => {
+            const { w: ow, h: oh } = s.desk;
+
+            if (!w || !h) return s;
+            if (!ow || !oh || (ow === w && oh === h)) return { desk: { w, h } };
+
+            const rx = w / ow;
+            const ry = h / oh;
+
+            const wins = Object.fromEntries(
+                Object.entries(s.wins).map(([id, win]) => [
+                    id,
+                    {
+                        ...win,
+                        x: win.x * rx,
+                        y: win.y * ry,
+                        width: win.width * rx,
+                        height: win.height * ry,
+                    },
+                ]),
+            );
+
+            return { desk: { w, h }, wins };
+        }),
     setPreview: (z) => set((s) => (s.preview === z ? s : { preview: z })),
 
     focus: (id) =>
@@ -90,5 +120,18 @@ export const useWM = create<Store>((set) => ({
                 ...s.wins,
                 [id]: { ...s.wins[id], maximized: !s.wins[id].maximized },
             },
+        })),
+
+    snapEnabled: false,
+    setSnapEnabled: (on) =>
+        set((s) => ({
+            snapEnabled: !s.snapEnabled,
+            preview: on ? s.preview : null,
+        })),
+
+    toggleSnap: () =>
+        set((s) => ({
+            snapEnabled: !s.snapEnabled,
+            preview: s.snapEnabled ? null : s.preview,
         })),
 }));

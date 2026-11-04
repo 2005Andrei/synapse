@@ -50,6 +50,7 @@ export function Window({
                 const s = useWM.getState();
                 const cur = s.wins[id];
                 const r = deskBox();
+                if (!r) return;
                 const p = pointer(e);
                 const px = p.x - r.left;
                 const py = p.y - r.top;
@@ -67,16 +68,23 @@ export function Window({
                     });
                 }
 
+                if (!s.snapEnabled) {
+                    setPreview(null);
+                    return;
+                }
+
                 const z = detectZone(px, py, s.desk, s.preview);
                 setPreview(z && (!zones || zones.includes(z)) ? z : null);
             }}
             onDragStop={(_, d) => {
                 setBusy(false);
                 const s = useWM.getState();
-                const zone = s.preview;
+                const zone = s.snapEnabled ? s.preview : null;
                 setPreview(null);
                 if (zone) patch(id, { snap: zone });
                 else if (!s.wins[id].snap) patch(id, { x: d.x, y: d.y });
+
+                console.log(`Window ${id} positions: ${d.x}, ${d.y}`);
             }}
             onResizeStart={() => setBusy(true)}
             onResizeStop={(_, __, ref, ___, pos) => {
