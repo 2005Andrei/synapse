@@ -23,7 +23,14 @@ export function Window({
     const { focus, patch, toggleMin, toggleMax, setPreview } = useWM.getState();
     const [busy, setBusy] = useState(false);
 
-    const free = w.snap ? zoneRect(w.snap, desk) : w;
+    const free = w.snap
+        ? zoneRect(w.snap, desk)
+        : {
+              x: w.x * desk.w,
+              y: w.y * desk.h,
+              width: w.width * desk.w,
+              height: w.height * desk.h,
+          };
 
     return (
         <Rnd
@@ -58,13 +65,15 @@ export function Window({
                 if (cur.snap) {
                     const from = zoneRect(cur.snap, s.desk);
                     const fx = (px - from.x) / from.width;
+                    const curW = cur.width * s.desk.w;
                     patch(id, {
                         snap: null,
-                        x: Math.min(
-                            Math.max(px - cur.width * fx, 0),
-                            s.desk.w - cur.width,
-                        ),
-                        y: Math.max(py - 16, 0),
+                        x:
+                            Math.min(
+                                Math.max(px - curW * fx, 0),
+                                s.desk.w - curW,
+                            ) / s.desk.w,
+                        y: Math.max(py - 16, 0) / s.desk.h,
                     });
                 }
 
@@ -72,7 +81,6 @@ export function Window({
                     setPreview(null);
                     return;
                 }
-
                 const z = detectZone(px, py, s.desk, s.preview);
                 setPreview(z && (!zones || zones.includes(z)) ? z : null);
             }}
@@ -82,17 +90,18 @@ export function Window({
                 const zone = s.snapEnabled ? s.preview : null;
                 setPreview(null);
                 if (zone) patch(id, { snap: zone });
-                else if (!s.wins[id].snap) patch(id, { x: d.x, y: d.y });
-
-                console.log(`Window ${id} positions: ${d.x}, ${d.y}`);
+                else if (!s.wins[id].snap)
+                    patch(id, { x: d.x / s.desk.w, y: d.y / s.desk.h });
             }}
             onResizeStart={() => setBusy(true)}
             onResizeStop={(_, __, ref, ___, pos) => {
                 setBusy(false);
+                const { w: dw, h: dh } = useWM.getState().desk;
                 patch(id, {
-                    width: ref.offsetWidth,
-                    height: ref.offsetHeight,
-                    ...pos,
+                    width: ref.offsetWidth / dw,
+                    height: ref.offsetHeight / dh,
+                    x: pos.x / dw,
+                    y: pos.y / dh,
                     snap: null,
                 });
             }}

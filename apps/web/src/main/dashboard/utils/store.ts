@@ -32,17 +32,14 @@ type Store = {
 };
 
 const base = { z: 0, minimized: false, maximized: false, snap: null };
-const pageWidth = window.innerWidth;
-const pageHeight = window.innerHeight;
-const dataWidth = window.innerWidth * 0.25;
 const initial: Win[] = [
     {
         id: "data",
         title: "Data",
-        x: pageWidth - dataWidth - 40,
+        x: 0.72,
         y: 0,
-        width: dataWidth,
-        height: pageHeight / 1.2,
+        width: 0.25,
+        height: 1 / 1.2,
         ...base,
     },
 ];
@@ -55,30 +52,7 @@ export const useWM = create<Store>((set) => ({
     preview: null,
 
     setDesk: (w, h) =>
-        set((s) => {
-            const { w: ow, h: oh } = s.desk;
-
-            if (!w || !h) return s;
-            if (!ow || !oh || (ow === w && oh === h)) return { desk: { w, h } };
-
-            const rx = w / ow;
-            const ry = h / oh;
-
-            const wins = Object.fromEntries(
-                Object.entries(s.wins).map(([id, win]) => [
-                    id,
-                    {
-                        ...win,
-                        x: win.x * rx,
-                        y: win.y * ry,
-                        width: win.width * rx,
-                        height: win.height * ry,
-                    },
-                ]),
-            );
-
-            return { desk: { w, h }, wins };
-        }),
+        set((s) => (s.desk.w === w && s.desk.h === h ? s : { desk: { w, h } })),
     setPreview: (z) => set((s) => (s.preview === z ? s : { preview: z })),
 
     focus: (id) =>
