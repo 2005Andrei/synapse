@@ -1,3 +1,3 @@
 export default function Graph() {
-    return <>graph</>;
+    return <div className="h-full w-full"></div>;
 }
