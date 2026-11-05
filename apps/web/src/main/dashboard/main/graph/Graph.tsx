@@ -235,11 +235,11 @@ export default function Graph() {
     }, []);
 
     return (
-        <div className="relative w-screen h-screen overflow-hidden">
+        <div className="relative w-full h-full overflow-hidden">
             <ForceGraph3D
                 ref={graphRef}
                 graphData={graphData}
-                backgroundColor="#050505"
+                backgroundColor="rgba(0, 0, 0, 0)"
                 onNodeClick={handleNodeClick}
                 onNodeHover={setHoveredNode}
                 nodeThreeObject={(node) =>
@@ -277,7 +277,7 @@ export default function Graph() {
                 linkPositionUpdate={updateLinkPosition}
             />
 
-            <div className="absolute bottom-25 left-6 w-[170px] h-[170px] bg-[rgba(15,15,20,0.85)] border border-white/15 rounded-xl backdrop-blur-[12px] shadow-[0_8px_32px_rgba(0,0,0,0.5)] z-10 flex flex-col items-center justify-center select-none">
+            <div className="absolute bottom-10 left-6 w-[210px] h-[150px] bg-[rgba(15,15,20,0.85)] border border-white/15 rounded-xl backdrop-blur-[12px] shadow-[0_8px_32px_rgba(0,0,0,0.5)] z-10 flex flex-col items-center justify-center select-none">
                 <div className="absolute top-2 left-[10px] text-[9px] font-bold tracking-[0.8px] text-white/50 uppercase font-mono pointer-events-none">
                     Minimap
                 </div>

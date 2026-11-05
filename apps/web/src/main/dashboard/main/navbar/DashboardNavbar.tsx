@@ -17,21 +17,11 @@ export default function DashboardNavbar() {
     };
 
     return (
-        <nav className="w-full text-primary font-mono p-4 sm:px-6 flex flex-wrap items-center justify-between gap-y-5">
-            <div className="flex flex-col items-start">
-                <a
-                    href="/"
-                    className="text-secondary-foreground text-base sm:text-lg  tracking-[0.15em] uppercase"
-                >
-                    Synapse
-                </a>
-                <div className="hidden lg:block text-[9px] text-gray-600 mt-1 uppercase  tracking-wider">
-                    DATABASE / 2026 · ONGOING INVESTIGATION
-                </div>
-            </div>
+        <nav className="absolute top-0 left-0 w-full h-20 text-primary font-mono p-4 sm:px-6 flex flex-wrap items-center justify-between gap-y-5">
+            <div className="flex flex-col items-start"></div>
 
             <div className="hidden md:flex order-3 lg:order-2 w-full lg:w-auto lg:flex-1 lg:mx-12 items-center border-b border-gray-700/80 pb-1.5 mt-1 lg:mt-0 max-w-[500px]">
-                <span className="text-primary mr-3 ">/</span>
+                <span className="text-primary mr-3">/</span>
                 <input
                     type="text"
                     placeholder="search entity, company, person.."
@@ -39,7 +29,7 @@ export default function DashboardNavbar() {
                 />
             </div>
 
-            <div className="flex-none order-2 lg:order-3 flex items-center gap-4 lg:gap-6 text-[10px] sm:text-xs uppercase  tracking-wider mt-0 lg:mt-1">
+            <div className="flex-none order-2 lg:order-3 flex items-center gap-4 lg:gap-6 text-[10px] sm:text-xs uppercase tracking-wider mt-0 lg:mt-1">
                 {links.map((link) => {
                     const isActive = activeView === link.id;
 

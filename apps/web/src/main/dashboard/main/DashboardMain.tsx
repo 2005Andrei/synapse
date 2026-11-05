@@ -40,7 +40,7 @@ export default function DashboardMain() {
     }, []);
     return (
         <main
-            className="w-full z-9999 flex-1 overflow-clip flex flex-row"
+            className="w-full flex-1 overflow-clip flex flex-row bg-background"
             id="desktop"
             ref={deskRef}
         >

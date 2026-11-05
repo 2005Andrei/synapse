@@ -105,7 +105,7 @@ export default function Sidebar() {
     }, []);
 
     return (
-        <div className="w-1/5 max-w-[400px] flex h-full flex-col p-7 border-r-2">
+        <div className="w-1/5 max-w-[400px] flex h-screen flex-col p-7 border-r-2 bg-transparent">
             <div
                 className="mb-6 flex items-center gap-2 px-2"
                 ref={containerRef}
