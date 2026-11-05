@@ -3,85 +3,16 @@ import ForceGraph3D from "react-force-graph-3d";
 import * as THREE from "three";
 import MOCK_DATA from "./mock_data.json";
 
-import { createNodeObject } from "./nodeRenderer";
+import { createNodeObject } from "./graph/nodeRenderer";
 import {
     createLinkThreeObject,
     updateLinkPosition,
     getLinkId,
     getLinkColor,
     getLinkWidth,
-} from "./linkRenderer";
-
-const ENTITY_COLORS = {
-    Person: "#ef476f",
-    Organization: "#118ab2",
-    Document: "#ffd166",
-    GeographicTies: "#06d6a0",
-    DigitalTrail: "#9d4edd",
-    Default: "#ffffff",
-};
-
-function transformData(data) {
-    if (!data?.entities) return { nodes: [], links: [] };
-
-    const nodes = data.entities.map((e) => ({
-        id: e.id,
-        type: e.type,
-        label: e.aliases?.length ? e.aliases[0] : `Unnamed ${e.type}`,
-        description: e.description,
-        attributes: e.attributes,
-        color: ENTITY_COLORS[e.type] || ENTITY_COLORS.Default,
-        val: 5,
-    }));
-
-    const validNodeIds = new Set(nodes.map((n) => n.id));
-
-    const links = [];
-    (data.claims || []).forEach((claim) => {
-        const sources = Array.isArray(claim.subject_ids)
-            ? claim.subject_ids
-            : [claim.subject_ids].filter(Boolean);
-        const targets = Array.isArray(claim.reference_ids)
-            ? claim.reference_ids
-            : [];
-        const label = claim.predicate ? claim.predicate.replace(/_/g, " ") : "";
-
-        if (sources.length > 0 && targets.length > 0) {
-            sources.forEach((src) => {
-                targets.forEach((tgt) => {
-                    if (validNodeIds.has(src) && validNodeIds.has(tgt)) {
-                        links.push({
-                            source: src,
-                            target: tgt,
-                            label,
-                            confidence: claim.confidence ?? 1.0,
-                        });
-                    }
-                });
-            });
-        } else if (sources.length === 2 && targets.length === 0) {
-            if (validNodeIds.has(sources[0]) && validNodeIds.has(sources[1])) {
-                links.push({
-                    source: sources[0],
-                    target: sources[1],
-                    label,
-                    confidence: claim.confidence ?? 1.0,
-                });
-            }
-        }
-    });
-
-    const degreeMap = new Map();
-    links.forEach((l) => {
-        degreeMap.set(l.source, (degreeMap.get(l.source) || 0) + 1);
-        degreeMap.set(l.target, (degreeMap.get(l.target) || 0) + 1);
-    });
-    nodes.forEach((n) => {
-        n.val += degreeMap.get(n.id) || 0;
-    });
-
-    return { nodes, links };
-}
+} from "./graph/linkRenderer";
+import { transformData } from "./lib/util";
+import { Window } from "../../utils/Window";
 
 export default function Graph() {
     const graphRef = useRef(null);
@@ -278,7 +209,7 @@ export default function Graph() {
     }, []);
 
     return (
-        <div className="relative w-screen h-screen bg-[#050505] overflow-hidden">
+        <div className="relative w-screen h-screen overflow-hidden">
             <ForceGraph3D
                 ref={graphRef}
                 graphData={graphData}
@@ -320,10 +251,9 @@ export default function Graph() {
                 linkPositionUpdate={updateLinkPosition}
             />
 
-            {/* Bottom-Left Interactive Pan Minimap */}
-            <div className="absolute bottom-6 left-6 w-[170px] h-[170px] bg-[rgba(15,15,20,0.85)] border border-white/15 rounded-xl backdrop-blur-[12px] shadow-[0_8px_32px_rgba(0,0,0,0.5)] z-10 flex flex-col items-center justify-center select-none">
+            <div className="absolute bottom-25 left-6 w-[170px] h-[170px] bg-[rgba(15,15,20,0.85)] border border-white/15 rounded-xl backdrop-blur-[12px] shadow-[0_8px_32px_rgba(0,0,0,0.5)] z-10 flex flex-col items-center justify-center select-none">
                 <div className="absolute top-2 left-[10px] text-[9px] font-bold tracking-[0.8px] text-white/50 uppercase font-mono pointer-events-none">
-                    Minimap (Pan ✥)
+                    Minimap
                 </div>
 
                 <canvas
@@ -335,54 +265,53 @@ export default function Graph() {
                 />
             </div>
 
-            {/* Floating Details Sidebar */}
             {selectedNode && (
-                <div className="absolute top-5 right-5 w-80 bg-[rgba(15,15,20,0.95)] border border-[#333] rounded-lg p-5 text-[#ececec] font-mono backdrop-blur-[10px] z-10 max-h-[calc(100vh-40px)] overflow-y-auto">
-                    <div className="flex justify-between items-center mb-[15px]">
-                        <h3
-                            className="m-0"
-                            style={{ color: selectedNode.color }}
-                        >
-                            {selectedNode.label}
-                        </h3>
-                        <button
-                            onClick={() => setSelectedNode(null)}
-                            className="bg-transparent border-none text-[#888] cursor-pointer text-[18px]"
-                        >
-                            ×
-                        </button>
-                    </div>
-
-                    <div className="text-[12px] text-[#aaa] mb-[15px] border-b border-[#333] pb-[15px]">
-                        {selectedNode.description}
-                    </div>
-
-                    <div className="text-[12px]">
-                        <div
-                            className="mb-2 uppercase tracking-[1px]"
-                            style={{ color: selectedNode.color }}
-                        >
-                            Attributes
+                <Window
+                    id="nodeInfo"
+                    key={1}
+                    onClose={() => setSelectedNode(null)}
+                >
+                    <div className="w-80 p-5 text-[#ececec] font-mono  z-10 max-h-[calc(100vh-40px)] overflow-y-auto">
+                        <div className="flex justify-center items-center mb-[15px]">
+                            <h3
+                                className="m-0"
+                                style={{ color: selectedNode.color }}
+                            >
+                                {selectedNode.label}
+                            </h3>
                         </div>
-                        {Object.entries(selectedNode.attributes || {}).map(
-                            ([key, value]) => (
-                                <div
-                                    key={key}
-                                    className="mb-[6px] flex flex-col"
-                                >
-                                    <span className="text-[#888]">
-                                        {key.replace(/_/g, " ")}:
-                                    </span>
-                                    <span className="text-white">
-                                        {Array.isArray(value)
-                                            ? value.join(", ")
-                                            : String(value)}
-                                    </span>
-                                </div>
-                            ),
-                        )}
+
+                        <div className="text-[12px] text-[#aaa] mb-[15px] border-b border-[#333] pb-[15px]">
+                            {selectedNode.description}
+                        </div>
+
+                        <div className="text-[12px]">
+                            <div
+                                className="mb-2 uppercase tracking-[1px]"
+                                style={{ color: selectedNode.color }}
+                            >
+                                Attributes
+                            </div>
+                            {Object.entries(selectedNode.attributes || {}).map(
+                                ([key, value]) => (
+                                    <div
+                                        key={key}
+                                        className="mb-[6px] flex flex-col"
+                                    >
+                                        <span className="text-[#888]">
+                                            {key.replace(/_/g, " ")}:
+                                        </span>
+                                        <span className="text-white">
+                                            {Array.isArray(value)
+                                                ? value.join(", ")
+                                                : String(value)}
+                                        </span>
+                                    </div>
+                                ),
+                            )}
+                        </div>
                     </div>
-                </div>
+                </Window>
             )}
         </div>
     );

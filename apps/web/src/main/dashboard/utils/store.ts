@@ -42,6 +42,15 @@ const initial: Win[] = [
         height: 1 / 1.05,
         ...base,
     },
+    {
+        id: "nodeInfo",
+        title: "Node",
+        x: 0.72,
+        y: 0,
+        width: null,
+        height: null,
+        ...base,
+    },
 ];
 
 export const useWM = create<Store>((set) => ({

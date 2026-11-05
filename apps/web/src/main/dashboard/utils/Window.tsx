@@ -1,6 +1,6 @@
-import { useState, type ReactNode } from "react";
+import { useState, type ReactNode, type ReactPortal } from "react";
 import { Rnd } from "react-rnd";
-import { Minus, Maximize2, Minimize2 } from "lucide-react";
+import { Minus, Maximize2, Minimize2, PanelTopClose, X } from "lucide-react";
 import { useWM } from "./store";
 import { cn } from "./util";
 import { detectZone, pointer, zoneRect, type ZoneId } from "./snap";
@@ -12,10 +12,12 @@ export function Window({
     id,
     zones, // optional  restrict which zones this window can snap to
     children,
+    onClose, // optional
 }: {
     id: string;
     zones?: ZoneId[];
     children: ReactNode;
+    onClose?: () => void;
 }) {
     const w = useWM((s) => s.wins[id]);
     const desk = useWM((s) => s.desk);
@@ -28,8 +30,8 @@ export function Window({
         : {
               x: w.x * desk.w,
               y: w.y * desk.h,
-              width: w.width * desk.w,
-              height: w.height * desk.h,
+              width: w.width === null ? "auto" : w.width * desk.w, // important is to give the children a minimum intrinsic size
+              height: w.height === null ? "auto" : w.height * desk.h,
           };
 
     return (
@@ -114,7 +116,7 @@ export function Window({
                 )}
             >
                 <div
-                    className="win-handle flex h-8 shrink-0 cursor-alias select-none items-center justify-between px-3 text-xs font-medium"
+                    className="win-handle flex h-8 shrink-0 cursor-all-scroll select-none items-center justify-between px-3 text-xs font-medium"
                     onDoubleClick={() => toggleMax(id)}
                 >
                     <span className={cn(!focused && "text-muted-foreground")}>
@@ -123,14 +125,14 @@ export function Window({
                     <div className="no-drag flex gap-1">
                         <button
                             onClick={() => toggleMin(id)}
-                            className="rounded p-1 hover:bg-accent"
+                            className="rounded p-1 hover:bg-accent hover:cursor-pointer"
                             aria-label="Minimize"
                         >
                             <Minus size={12} />
                         </button>
                         <button
                             onClick={() => toggleMax(id)}
-                            className="rounded p-1 hover:bg-accent"
+                            className="rounded p-1 hover:bg-accent hover:cursor-pointer"
                             aria-label="Maximize"
                         >
                             {w.maximized ? (
@@ -139,6 +141,15 @@ export function Window({
                                 <Maximize2 size={12} />
                             )}
                         </button>
+                        {onClose && (
+                            <button
+                                onClick={onClose}
+                                className="rounded p-1 hover:bg-accent hover:cursor-pointer"
+                                aria-label="Close"
+                            >
+                                <X size={12} />
+                            </button>
+                        )}
                     </div>
                 </div>
                 <div className="min-h-0 flex-1 overflow-auto">{children}</div>
