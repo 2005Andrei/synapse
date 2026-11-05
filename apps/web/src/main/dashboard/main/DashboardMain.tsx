@@ -6,6 +6,8 @@ import Graph from "./graph/Graph";
 import DataContainer from "./sidebars/DataContainer";
 import Sidebar from "./sidebars/Sidebar";
 import { useEffect, useRef } from "react";
+import { Dock } from "../utils/dock/Dock";
+import { WindowLayer } from "../utils/WindowLayer";
 
 function SnapPreview() {
     const zone = useWM((s) => s.preview);
@@ -44,9 +46,11 @@ export default function DashboardMain() {
         >
             <Sidebar />
             <Graph />
-            <Window id="data" key={0}>
+            <WindowLayer />
+            {/*<Window id="data" key={0}>
                 <DataContainer />
-            </Window>
+            </Window>*/}
+            <Dock />
         </main>
     );
 }

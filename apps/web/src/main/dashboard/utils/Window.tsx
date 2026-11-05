@@ -1,6 +1,6 @@
-import { useState, type ReactNode, type ReactPortal } from "react";
+import { useState, type ReactNode } from "react";
 import { Rnd } from "react-rnd";
-import { Minus, Maximize2, Minimize2, PanelTopClose, X } from "lucide-react";
+import { Minus, Maximize2, Minimize2, X } from "lucide-react";
 import { useWM } from "./store";
 import { cn } from "./util";
 import { detectZone, pointer, zoneRect, type ZoneId } from "./snap";
@@ -12,7 +12,6 @@ export function Window({
     id,
     zones, // optional  restrict which zones this window can snap to
     children,
-    onClose, // optional
 }: {
     id: string;
     zones?: ZoneId[];
@@ -111,7 +110,7 @@ export function Window({
         >
             <div
                 className={cn(
-                    "flex h-full flex-col overflow-hidden border border-border/50 bg-card/70 text-card-foreground rounded-sm", // maybe add shodow-md
+                    "flex h-full flex-col overflow-hidden border border-border/50 bg-card/70 text-card-foreground rounded-sm", // maybe shodow-md
                     focused && "shadow-xl ring-1 ring-ring/40",
                 )}
             >
@@ -141,15 +140,13 @@ export function Window({
                                 <Maximize2 size={12} />
                             )}
                         </button>
-                        {onClose && (
-                            <button
-                                onClick={onClose}
-                                className="rounded p-1 hover:bg-accent hover:cursor-pointer"
-                                aria-label="Close"
-                            >
-                                <X size={12} />
-                            </button>
-                        )}
+                        <button
+                            onClick={() => useWM.getState().closeWindow(id)}
+                            className="rounded p-1 hover:bg-accent hover:cursor-pointer"
+                            aria-label="Close"
+                        >
+                            <X size={12} />
+                        </button>
                     </div>
                 </div>
                 <div className="min-h-0 flex-1 overflow-auto">{children}</div>

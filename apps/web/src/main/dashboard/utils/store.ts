@@ -3,6 +3,7 @@ import type { Desk, ZoneId } from "./snap";
 
 export type Win = {
     id: string;
+    kind: string;
     title: string;
     x: number;
     y: number;
@@ -12,6 +13,18 @@ export type Win = {
     minimized: boolean;
     maximized: boolean;
     snap: ZoneId | null;
+    props?: Record<string, unknown>;
+};
+
+export type OpenSpec = {
+    id: string;
+    kind: string;
+    title: string;
+    x?: number;
+    y?: number;
+    width?: number | null;
+    height?: number | null;
+    props?: Record<string, unknown>;
 };
 
 type Store = {
@@ -29,26 +42,20 @@ type Store = {
     snapEnabled: boolean;
     setSnapEnabled: (on: boolean) => void;
     toggleSnap: () => void;
+    openWindow: (spec: OpenSpec) => void;
+    closeWindow: (id: string) => void;
 };
 
 const base = { z: 0, minimized: false, maximized: false, snap: null };
 const initial: Win[] = [
     {
         id: "data",
+        kind: "data",
         title: "Data",
         x: 0.72,
         y: 0,
         width: 0.25,
         height: 1 / 1.05,
-        ...base,
-    },
-    {
-        id: "nodeInfo",
-        title: "Node",
-        x: 0.72,
-        y: 0,
-        width: null,
-        height: null,
         ...base,
     },
 ];
@@ -59,6 +66,52 @@ export const useWM = create<Store>((set) => ({
     focused: null,
     desk: { w: 0, h: 0 },
     preview: null,
+
+    openWindow: (spec) =>
+        set((s) => {
+            const z = s.topZ + 1;
+            const existing = s.wins[spec.id];
+
+            if (existing) {
+                return {
+                    topZ: z,
+                    focused: spec.id,
+                    wins: {
+                        ...s.wins,
+                        [spec.id]: { ...existing, minimized: false, z },
+                    },
+                };
+            }
+
+            const offset = (Object.keys(s.wins).length % 8) * 0.03;
+            const win: Win = {
+                x: 0.1 + offset,
+                y: 0.1 + offset,
+                width: 0.3,
+                height: 0.4,
+                minimized: false,
+                maximized: false,
+                snap: null,
+                ...spec,
+                z,
+            };
+            return {
+                topZ: z,
+                focused: spec.id,
+                wins: { ...s.wins, [spec.id]: win },
+            };
+        }),
+
+    closeWindow: (id) =>
+        set((s) => {
+            const wins = { ...s.wins };
+            delete wins[id];
+            return {
+                wins,
+                focused: s.focused === id ? null : s.focused,
+                preview: null,
+            };
+        }),
 
     setDesk: (w, h) =>
         set((s) => (s.desk.w === w && s.desk.h === h ? s : { desk: { w, h } })),

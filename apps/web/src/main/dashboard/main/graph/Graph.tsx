@@ -12,7 +12,7 @@ import {
     getLinkWidth,
 } from "./graph/linkRenderer";
 import { transformData } from "./lib/util";
-import { Window } from "../../utils/Window";
+import { useWM } from "../../utils/store";
 
 export default function Graph() {
     const graphRef = useRef(null);
@@ -169,8 +169,26 @@ export default function Graph() {
         };
     }, []);
 
+    const openWindow = useWM((s) => s.openWindow);
+
     const handleNodeClick = useCallback((node) => {
-        setSelectedNode((prev) => (prev?.id === node.id ? null : node));
+        setSelectedNode(node);
+
+        openWindow({
+            id: `node:${node.id}`,
+            kind: "nodeInfo",
+            title: node.label,
+            x: 0.2,
+            y: 0.08,
+            width: null,
+            height: null,
+            props: {
+                label: node.label,
+                color: node.color,
+                description: node.description,
+                attributes: node.attributes,
+            },
+        });
 
         if (!graphRef.current) return;
 
@@ -188,6 +206,14 @@ export default function Graph() {
             1500,
         );
     }, []);
+
+    const selectedWindowOpen = useWM((s) =>
+        selectedNode ? `node:${selectedNode.id}` in s.wins : true,
+    );
+
+    useEffect(() => {
+        if (!selectedWindowOpen) setSelectedNode(null);
+    }, [selectedWindowOpen]);
 
     const handleLinkClick = useCallback((link) => {
         const key = `${getLinkId(link.source)}-${getLinkId(link.target)}`;
@@ -264,55 +290,6 @@ export default function Graph() {
                     className="cursor-move block mt-2.5"
                 />
             </div>
-
-            {selectedNode && (
-                <Window
-                    id="nodeInfo"
-                    key={1}
-                    onClose={() => setSelectedNode(null)}
-                >
-                    <div className="w-80 p-5 text-[#ececec] font-mono  z-10 max-h-[calc(100vh-40px)] overflow-y-auto">
-                        <div className="flex justify-center items-center mb-[15px]">
-                            <h3
-                                className="m-0"
-                                style={{ color: selectedNode.color }}
-                            >
-                                {selectedNode.label}
-                            </h3>
-                        </div>
-
-                        <div className="text-[12px] text-[#aaa] mb-[15px] border-b border-[#333] pb-[15px]">
-                            {selectedNode.description}
-                        </div>
-
-                        <div className="text-[12px]">
-                            <div
-                                className="mb-2 uppercase tracking-[1px]"
-                                style={{ color: selectedNode.color }}
-                            >
-                                Attributes
-                            </div>
-                            {Object.entries(selectedNode.attributes || {}).map(
-                                ([key, value]) => (
-                                    <div
-                                        key={key}
-                                        className="mb-[6px] flex flex-col"
-                                    >
-                                        <span className="text-[#888]">
-                                            {key.replace(/_/g, " ")}:
-                                        </span>
-                                        <span className="text-white">
-                                            {Array.isArray(value)
-                                                ? value.join(", ")
-                                                : String(value)}
-                                        </span>
-                                    </div>
-                                ),
-                            )}
-                        </div>
-                    </div>
-                </Window>
-            )}
         </div>
     );
 }
