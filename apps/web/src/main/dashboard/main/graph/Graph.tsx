@@ -9,7 +9,6 @@ import {
     updateLinkPosition,
     getLinkId,
     getLinkColor,
-    getLinkWidth,
 } from "./graph/linkRenderer";
 import { transformData } from "./lib/util";
 import { useWM } from "../../utils/store";
@@ -215,15 +214,13 @@ export default function Graph() {
         if (!selectedWindowOpen) setSelectedNode(null);
     }, [selectedWindowOpen]);
 
-    const handleLinkClick = useCallback((link) => {
+    const handleLinkClick = useCallback((link, event) => {
+        storeClickPosition(link, event, graphRef);
+
         const key = `${getLinkId(link.source)}-${getLinkId(link.target)}`;
         setToggledLinks((prev) => {
             const next = new Set(prev);
-            if (next.has(key)) {
-                next.delete(key);
-            } else {
-                next.add(key);
-            }
+            next.has(key) ? next.delete(key) : next.add(key);
             return next;
         });
     }, []);
@@ -251,9 +248,8 @@ export default function Graph() {
                 }
                 onLinkClick={handleLinkClick}
                 onLinkHover={handleLinkHover}
-                linkWidth={(link) =>
-                    getLinkWidth(link, selectedNode?.id, null, hoveredLinkId)
-                }
+                linkWidth={0.3}
+                linkHoverPrecision={8}
                 linkColor={(link) =>
                     getLinkColor(link, selectedNode?.id, null, hoveredLinkId)
                 }
@@ -262,11 +258,11 @@ export default function Graph() {
                     const src = getLinkId(link.source);
                     const tgt = getLinkId(link.target);
                     return selectedNode?.id === src || selectedNode?.id === tgt
-                        ? 4
+                        ? 1
                         : 0;
                 }}
                 linkDirectionalParticleSpeed={0.007}
-                linkDirectionalParticleWidth={1.4}
+                linkDirectionalParticleWidth={0.5}
                 linkThreeObjectExtend={true}
                 linkThreeObject={(link) => {
                     const key = `${getLinkId(link.source)}-${getLinkId(link.target)}`;
@@ -274,7 +270,9 @@ export default function Graph() {
                         hoveredLinkId === key || toggledLinks.has(key);
                     return createLinkThreeObject(link, isVisible);
                 }}
-                linkPositionUpdate={updateLinkPosition}
+                linkPositionUpdate={(sprinte, coords, link) =>
+                    updateLinkPosition(sprinte, coords, link, graphRef)
+                }
             />
 
             <div className="absolute bottom-10 left-6 w-[210px] h-[150px] bg-[rgba(15,15,20,0.85)] border border-white/15 rounded-xl backdrop-blur-[12px] shadow-[0_8px_32px_rgba(0,0,0,0.5)] z-10 flex flex-col items-center justify-center select-none">

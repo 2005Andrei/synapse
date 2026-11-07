@@ -1,8 +1,8 @@
 export const ENTITY_COLORS = {
-    Person: "#ef476f",
-    Organization: "#118ab2",
+    Person: "#f16035",
+    Organization: "#529af3",
     Document: "#ffd166",
-    GeographicTies: "#06d6a0",
-    DigitalTrail: "#9d4edd",
+    GeographicTies: "#69ff94",
+    DigitalTrail: "#a581e7",
     Default: "#ffffff",
 };
