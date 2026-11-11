@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import SpriteText from "three-spritetext";
 import * as THREE from "three";
 

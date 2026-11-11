@@ -6,3 +6,7 @@ export const ENTITY_COLORS = {
     DigitalTrail: "#a581e7",
     Default: "#ffffff",
 };
+
+export const LINK_COLORS = {
+    Default: "#ffffff",
+};

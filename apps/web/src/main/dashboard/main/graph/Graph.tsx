@@ -22,6 +22,8 @@ export default function Graph() {
     const [selectedNode, setSelectedNode] = useState(null);
     const [hoveredNode, setHoveredNode] = useState(null);
 
+    const [selectedLink, setSelectedLink] = useState(null);
+
     const [toggledLinks, setToggledLinks] = useState(() => new Set());
     const [hoveredLinkId, setHoveredLinkId] = useState(null);
 
@@ -206,16 +208,29 @@ export default function Graph() {
         );
     }, []);
 
-    const selectedWindowOpen = useWM((s) =>
-        selectedNode ? `node:${selectedNode.id}` in s.wins : true,
-    );
+    const handleLinkClick = useCallback((link) => {
+        // storeClickPosition(link, event, graphRef);
 
-    useEffect(() => {
-        if (!selectedWindowOpen) setSelectedNode(null);
-    }, [selectedWindowOpen]);
+        // console.log(link.source);
+        setSelectedLink(link);
 
-    const handleLinkClick = useCallback((link, event) => {
-        storeClickPosition(link, event, graphRef);
+        openWindow({
+            id: `link:${link.id}`,
+            kind: "linkInfo",
+            title: link.label ? link.label : "Link title",
+            x: 0.4,
+            y: 0.5,
+            width: null,
+            height: null,
+            props: {
+                label: link.label ? link.label : "Link Info",
+                color: link.color,
+                source: link.source,
+                target: link.target,
+                confidence: link.confidence,
+                attributes: link.attributes ? link.attributes : null,
+            },
+        });
 
         const key = `${getLinkId(link.source)}-${getLinkId(link.target)}`;
         setToggledLinks((prev) => {
@@ -224,6 +239,32 @@ export default function Graph() {
             return next;
         });
     }, []);
+
+    const selectedNodeWindowOpen = useWM((s) =>
+        selectedNode ? `node:${selectedNode.id}` in s.wins : true,
+    );
+    const selectedLinkWindowOpen = useWM((s) =>
+        selectedLink ? `link:${selectedLink.id}` in s.wins : true,
+    );
+
+    useEffect(() => {
+        if (!selectedNodeWindowOpen) setSelectedNode(null);
+    }, [selectedNodeWindowOpen]);
+
+    useEffect(() => {
+        if (!selectedLinkWindowOpen) setSelectedLink(null);
+    }, [selectedLinkWindowOpen]);
+
+    // const handleLinkClick = useCallback((link, event) => {
+    //     storeClickPosition(link, event, graphRef);
+    //
+    //     const key = `${getLinkId(link.source)}-${getLinkId(link.target)}`;
+    //     setToggledLinks((prev) => {
+    //         const next = new Set(prev);
+    //         next.has(key) ? next.delete(key) : next.add(key);
+    //         return next;
+    //     });
+    // }, []);
 
     const handleLinkHover = useCallback((link) => {
         setHoveredLinkId(

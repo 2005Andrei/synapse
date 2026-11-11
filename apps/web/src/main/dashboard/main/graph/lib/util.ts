@@ -1,4 +1,4 @@
-import { ENTITY_COLORS } from "../config";
+import { ENTITY_COLORS, LINK_COLORS } from "../config";
 
 // this function should not add much overhead, O(N + L), N, L = nodes, links is the complexity which should be fine
 // what is challenging is the physics engine
@@ -34,10 +34,12 @@ export function transformData(data) {
                 targets.forEach((tgt) => {
                     if (validNodeIds.has(src) && validNodeIds.has(tgt)) {
                         links.push({
+                            id: `${claim.id}:${src}->${tgt}`,
                             source: src,
                             target: tgt,
                             label,
                             confidence: claim.confidence ?? 1.0,
+                            color: LINK_COLORS.Default,
                         });
                     }
                 });
@@ -48,10 +50,12 @@ export function transformData(data) {
                 validNodeIds.has(subjects[1])
             ) {
                 links.push({
+                    id: `${claim.id}:${subjects[0]}->${subjects[1]}`,
                     source: subjects[0],
                     target: subjects[1],
                     label,
                     confidence: claim.confidence ?? 1.0,
+                    color: LINK_COLORS.Default,
                 });
             }
         }
