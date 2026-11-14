@@ -25,7 +25,7 @@ export default function DashboardNavbar() {
                 <input
                     type="text"
                     placeholder="search entity, company, person.."
-                    className="bg-transparent border-none outline-none w-full text-xs placeholder-gray-600 focus:ring-0 uppercase max-width-[300px]"
+                    className="bg-transparent border-none outline-none w-full text-xs placeholder-gray-600 focus:ring-0 uppercase max-width-[300px] z-999"
                 />
             </div>
 
