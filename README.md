@@ -11,3 +11,13 @@ Current dev in on prototype branch, slowly working on it.
 
 
 ![demo 3](https://github.com/2005Andrei/synapse/blob/prototype/demo/demo-3.png)
+
+
+Things to not forget and look into:
+- entity differentiation
+- attributes
+- pdf reader & parser
+- summary per each source - AI (langgraph) or not remains to be seen
+- a bunch of other stuff i can't remember rn
+
+
