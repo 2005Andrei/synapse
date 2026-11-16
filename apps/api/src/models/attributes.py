@@ -29,6 +29,6 @@ class PersonAttributes(BaseAttributes):
 
 
 ATTRIBUTES_BY_TYPE: dict[EntityType, type[BaseAttributes]] = {
-    EntityType.COMPANY: CompanyAttributes,
+    EntityType.ORGANIZATION: CompanyAttributes,
     EntityType.PERSON: PersonAttributes,
 }

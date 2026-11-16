@@ -1,34 +1,58 @@
-import requests
+import logging
 import xml.etree.ElementTree as ET
-import urllib3
-import hashlib
-from datetime import datetime
+from xml.sax.saxutils import escape
 
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+from connectors.anaf.parties import split_party
+from connectors.common.text import fold, guess_entity_type
+from connectors.scraper import BaseScraper, ScrapeBatch, ScraperCategory
+from models.ids import company_id, document_id, mention_id
+from models.types import EntityType, Predicate, SourceType
+
+log = logging.getLogger(__name__)
 
 SOAP_URL = "http://portalquery.just.ro/query.asmx"
-HEADERS = {
+SOAP_HEADERS = {
     "Content-Type": "text/xml; charset=utf-8",
     "SOAPAction": "portalquery.just.ro/CautareDosare",
-    "User-Agent": "Mozilla/5.0",
     "Accept": "text/xml",
 }
 NS = "portalquery.just.ro"
+XSI_NIL = "{http://www.w3.org/2001/XMLSchema-instance}nil"
+# The portal has no stable public deep link per case; point at its search page.
+PORTAL_SEARCH_URL = "https://portal.just.ro/SitePages/cautare.aspx"
+
+# calitateParte (folded) -> predicate. Anything else becomes "Party_To".
+_PARTY_ROLES = {
+    Predicate.DEFENDANT_IN: ("parat", "inculpat", "intimat", "debitor", "condamnat"),
+    Predicate.PLAINTIFF_IN: ("reclamant", "petent", "creditor", "apelant", "contestator", "recurent"),
+}  # fmt: skip
 
 
-class PortalJustScraper:
-    def __init__(self):
-        self.session = requests.Session()
-        self.session.headers.update({"User-Agent": "Mozilla/5.0"})
+class PortalJustScraper(BaseScraper):
+    """Court cases in which the query appears as a party (portal.just.ro)."""
 
-    def cauta_dosare(self, nume_parte: str = "") -> list:
+    name = "portal_just"
+    label = "Portal Just"
+    category = ScraperCategory.REGISTRY
+    source_type = SourceType.COURT_DOCUMENT
+    description = "Court cases by party name, from the portal.just.ro SOAP API"
+    confidence = 0.9
+    timeout = 30
+    retries = 1
+    default_limit = 10  # cases
+
+    # A case can list hundreds of parties (insolvencies); keep the graph readable.
+    max_parties_per_case = 6
+
+    # --- raw API -----------------------------------------------------------
+    def cauta_dosare(self, nume_parte: str) -> list[dict]:
         body = f"""<?xml version="1.0" encoding="utf-8"?>
 <soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
                xmlns:xsd="http://www.w3.org/2001/XMLSchema"
                xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
   <soap:Body>
     <CautareDosare xmlns="{NS}">
-      <numeParte>{nume_parte}</numeParte>
+      <numeParte>{escape(nume_parte)}</numeParte>
       <obiectDosar xsi:nil="true"/>
       <numarul xsi:nil="true"/>
       <dataStart xsi:nil="true"/>
@@ -36,210 +60,158 @@ class PortalJustScraper:
     </CautareDosare>
   </soap:Body>
 </soap:Envelope>"""
+        response = self.http.post(
+            SOAP_URL, content=body.encode("utf-8"), headers=SOAP_HEADERS
+        )
+        return self.parseaza_raspuns(response.text)
 
-        try:
-            r = self.session.post(
-                SOAP_URL, data=body.encode("utf-8"), headers=HEADERS, timeout=30
-            )
-            print(f"HTTP status: {r.status_code}")
-            r.raise_for_status()
-            return self.parseaza_raspuns(r.text)
-        except Exception as e:
-            print(f"Eroare: {e}")
-            return []
-
-    def parseaza_raspuns(self, xml_text: str) -> list:
+    def parseaza_raspuns(self, xml_text: str) -> list[dict]:
+        root = ET.fromstring(xml_text)
         dosare = []
-        try:
-            root = ET.fromstring(xml_text)
 
-            items = root.findall(f".//{{{NS}}}Dosar")
+        for dosar in root.findall(f".//{{{NS}}}Dosar"):
+            parti = [
+                {"nume": nume, "calitate": _text(parte, "calitateParte")}
+                for parte in dosar.findall(f".//{{{NS}}}DosarParte")
+                if parte.get(XSI_NIL) != "true"
+                and (nume := _text(parte, "nume")) != "N/A"
+            ]
+            sedinte = [
+                {
+                    "data": _text(sedinta, "data"),
+                    "ora": _text(sedinta, "ora"),
+                    "complet": _text(sedinta, "complet"),
+                    "solutie": _text(sedinta, "solutie"),
+                }
+                for sedinta in dosar.findall(f".//{{{NS}}}DosarSedinta")
+                if sedinta.get(XSI_NIL) != "true"
+            ]
+            dosare.append(
+                {
+                    "numar": _text(dosar, "numar"),
+                    "data": min((s["data"] for s in sedinte), default="N/A"),
+                    "status": _text(dosar, "stadiuProcesualNume"),
+                    "instanta": _text(dosar, "institutie"),
+                    "sectie": _text(dosar, "sectie"),
+                    "obiect": _text(dosar, "obiect"),
+                    "parti": parti,
+                    "sedinte": sedinte,
+                }
+            )
 
-            for dosar in items:
-
-                def g(tag):
-                    el = dosar.find(f"{{{NS}}}{tag}")
-                    return el.text.strip() if el is not None and el.text else "N/A"
-
-                parti = []
-                for parte in dosar.findall(f".//{{{NS}}}DosarParte"):
-                    if (
-                        parte.get("{http://www.w3.org/2001/XMLSchema-instance}nil")
-                        == "true"
-                    ):
-                        continue
-                    nume_el = parte.find(f"{{{NS}}}nume")
-                    cal_el = parte.find(f"{{{NS}}}calitateParte")
-                    if nume_el is not None and nume_el.text:
-                        parti.append(
-                            {
-                                "nume": nume_el.text.strip(),
-                                "calitate": cal_el.text.strip()
-                                if cal_el is not None and cal_el.text
-                                else "N/A",
-                            }
-                        )
-
-                sedinte = []
-                for sedinta in dosar.findall(f".//{{{NS}}}DosarSedinta"):
-                    if (
-                        sedinta.get("{http://www.w3.org/2001/XMLSchema-instance}nil")
-                        == "true"
-                    ):
-                        continue
-
-                    def gs(tag):
-                        el = sedinta.find(f"{{{NS}}}{tag}")
-                        return el.text.strip() if el is not None and el.text else "N/A"
-
-                    sedinte.append(
-                        {
-                            "data": gs("data"),
-                            "ora": gs("ora"),
-                            "complet": gs("complet"),
-                            "solutie": gs("solutie"),
-                        }
-                    )
-
-                data_dosar = "N/A"
-                if sedinte:
-                    try:
-                        data_dosar = sorted(sedinte, key=lambda s: s["data"])[0]["data"]
-                    except Exception:
-                        pass
-
-                dosare.append(
-                    {
-                        "numar": g("numar"),
-                        "data": data_dosar,
-                        "status": g("stadiuProcesualNume"),
-                        "instanta": g("institutie"),
-                        "sectie": g("sectie"),
-                        "obiect": g("obiect"),
-                        "parti": parti,
-                        "sedinte": sedinte,
-                    }
-                )
-
-        except ET.ParseError as e:
-            print(f"Eroare: {e}")
         return dosare
 
-    def _filtreaza_relevante(self, dosare: list, termen_cautat: str) -> list:
-        termeni = termen_cautat.upper().split()
-        dosare_relevante = []
-        for d in dosare:
-            for parte in d["parti"]:
-                nume_upper = parte["nume"].upper()
-                if all(t in nume_upper for t in termeni):
-                    dosare_relevante.append(d)
-                    break
-        return dosare_relevante
-
-    def _build_url(self, numar: str) -> str:
-        try:
-            segmente = numar.split("/")
-            if len(segmente) >= 2:
-                id_inst = segmente[1].strip()
-                id_dosar = hashlib.md5(numar.encode()).hexdigest()
-                return f"https://portal.just.ro/{id_inst}/SitePages/Dosar.aspx?id_dosar={id_dosar}&id_inst={id_inst}"
-        except Exception:
-            pass
-        return f"https://portal.just.ro/SitePages/cautare.aspx"
-
-    def search(self, target: str):
-        print(f"[PortalJust] Search: {target}")
-
-        dosare_brute = self.cauta_dosare(nume_parte=target)
-        dosare_filtrate = self._filtreaza_relevante(dosare_brute, target)
-
-        print(
-            f'[PortalJust] {len(dosare_brute)} dosare brute, {len(dosare_filtrate)} relevante pentru "{target}"'
+    # --- scrape ------------------------------------------------------------
+    def scrape(self, query: str, limit: int, out: ScrapeBatch) -> None:
+        dosare = self.cauta_dosare(query)
+        # The API matches loosely; keep cases where a party has every query word.
+        terms = fold(query).split()
+        relevant = [
+            dosar
+            for dosar in dosare
+            if any(_matches(parte["nume"], terms) for parte in dosar["parti"])
+        ]
+        out.metadata.update(
+            raw_cases=len(dosare),
+            relevant_cases=len(relevant),
+            returned_cases=min(len(relevant), limit),
         )
 
-        graph_nodes = []
-        seen_parti = set()
-        seen_dosare = set()
-
-        for dosar in dosare_filtrate:
+        for dosar in relevant[:limit]:
             numar = dosar["numar"]
-            obiect = dosar["obiect"]
+            court_file = out.source(
+                url=PORTAL_SEARCH_URL,
+                title=f"Dosar {numar}",
+                content=_describe(dosar),
+                key=f"portal_just:dosar:{numar}",
+            )
+            case = out.entity(
+                document_id(f"dosar:{numar}"),
+                EntityType.DOCUMENT,
+                f"Dosar {numar}",
+                description=f"{dosar['obiect']} — {dosar['instanta']} | Status: {dosar['status']}",
+                document_type="court case",
+                case_number=numar,
+                court=dosar["instanta"],
+                section=dosar["sectie"],
+                subject_matter=dosar["obiect"],
+                stage=dosar["status"],
+                first_hearing=dosar["data"],
+                hearings=len(dosar["sedinte"]),
+                parties=len(dosar["parti"]),
+            )
 
-            # Noduri parti
-            for parte in dosar["parti"]:
-                nume_parte = parte["nume"]
-                if nume_parte not in seen_parti:
-                    seen_parti.add(nume_parte)
-                    parte_id = hashlib.md5(nume_parte.encode()).hexdigest()
-                    graph_nodes.append(
-                        {
-                            "id": f"person_{parte_id}",
-                            "type": "Person",
-                            "label": nume_parte,
-                            "summary": f"{parte['calitate']} in dosare judiciare",
-                            "url": "N/A",
-                        }
-                    )
-
-            if numar not in seen_dosare:
-                seen_dosare.add(numar)
-                dosar_id = hashlib.md5(numar.encode()).hexdigest()
-                graph_nodes.append(
-                    {
-                        "id": f"doc_{dosar_id}",
-                        "type": "Document",
-                        "label": f"Dosar {numar}",
-                        "summary": f"{obiect} — {dosar['instanta']} | Status: {dosar['status']}",
-                        "url": self._build_url(numar),
-                        "metadata": {
-                            "source": "Portal Just",  # bad practise but whatevs
-                            "numar": numar,
-                            "data": dosar["data"],
-                            "status": dosar["status"],
-                            "instanta": dosar["instanta"],
-                            "sectie": dosar["sectie"],
-                            "obiect": obiect,
-                            "parti": dosar["parti"],
-                            "sedinte": dosar["sedinte"],
-                        },
-                    }
+            # Parties that match the query first, so the cap never drops them.
+            parti = sorted(dosar["parti"], key=lambda p: not _matches(p["nume"], terms))
+            for parte in parti[: self.max_parties_per_case]:
+                calitate = parte["calitate"]
+                # "CITY, PRIN PRIMAR X" is two things: a party and who acts for it.
+                parsed = split_party(parte["nume"])
+                nume = parsed.name
+                party_type = (
+                    EntityType.ORGANIZATION if parsed.cui else guess_entity_type(nume)
+                )
+                party = out.entity(
+                    company_id(parsed.cui)
+                    if parsed.cui
+                    else mention_id(self.name, party_type, fold(nume)),
+                    party_type,
+                    nume,
+                    description="Parte în dosare judiciare",
+                    cui=parsed.cui,
+                )
+                out.claim(
+                    party,
+                    _predicate(calitate),
+                    f"{nume} — {calitate} în dosarul {numar} ({dosar['instanta']}).",
+                    case,
+                    sources=[court_file],
                 )
 
-        return {
-            "source": "portal just scraper",
-            "type": "document",
-            "certainty": "0",
-            # "metadata": {
-            #     "timestamp": datetime.now().isoformat(),
-            #     "source": "portal.just.ro",
-            #     "count": len(graph_nodes),
-            # },
-            "metadata": {
-                "timestamp": datetime.now().isoformat(),
-                "source": "portal.just.ro",
-                "query": {"target": target},
-                "stats": {
-                    "nodes": len(graph_nodes),
-                    "raw_cases": len(dosare_brute),
-                    "filtered_cases": len(dosare_filtrate),
-                },
-                "distribution": {
-                    "persons": len(seen_parti),
-                    "documents": len(seen_dosare),
-                },
-                "institutions": list(
-                    set(
-                        d.get("instanta", "")
-                        for d in dosare_filtrate
-                        if d.get("instanta")
+                if parsed.representative:
+                    rep_type = guess_entity_type(parsed.representative)
+                    representative = out.entity(
+                        mention_id(self.name, rep_type, fold(parsed.representative)),
+                        rep_type,
+                        parsed.representative,
+                        description="Reprezentant în dosare judiciare",
                     )
-                ),
-                "uids_count": len(seen_dosare),
-                "scrape_info": {
-                    "base_url": SOAP_URL,
-                    "parser": "soap_xml_portal_just",
-                    "method": "CautareDosare",
-                },
-            },
-            "nodes": graph_nodes,
-        }
+                    out.claim(
+                        representative,
+                        Predicate.REPRESENTS,
+                        f"{parsed.representative} reprezintă {nume} ({parsed.role}) "
+                        f"în dosarul {numar}.",
+                        party,
+                        sources=[court_file],
+                    )
+
+def _text(element: ET.Element, tag: str) -> str:
+    child = element.find(f"{{{NS}}}{tag}")
+    return child.text.strip() if child is not None and child.text else "N/A"
+
+
+def _matches(name: str, terms: list[str]) -> bool:
+    folded = fold(name)
+    return all(term in folded for term in terms)
+
+
+def _predicate(calitate: str) -> Predicate | str:
+    role = fold(calitate)
+    for predicate, markers in _PARTY_ROLES.items():
+        if any(marker in role for marker in markers):
+            return predicate
+    return "Party_To"
+
+
+def _describe(dosar: dict) -> str:
+    lines = [
+        f"Dosar {dosar['numar']} — {dosar['instanta']}, {dosar['sectie']}",
+        f"Obiect: {dosar['obiect']}",
+        f"Stadiu: {dosar['status']}",
+        "Părți: " + "; ".join(f"{p['nume']} ({p['calitate']})" for p in dosar["parti"]),
+    ]
+    lines += [
+        f"Ședință {s['data']} {s['ora']} ({s['complet']}): {s['solutie']}"
+        for s in dosar["sedinte"]
+    ]
+    return "\n".join(lines)

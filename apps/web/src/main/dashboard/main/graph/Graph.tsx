@@ -10,8 +10,30 @@ import {
     getLinkId,
     getLinkColor,
 } from "./graph/linkRenderer";
-import { transformData } from "./lib/util";
+import { reconcileGraph, transformData } from "./lib/util";
+import {
+    useActiveRun,
+    useInvestigation,
+} from "../../providers/investigation/store";
 import { useWM } from "../../utils/store";
+import { shorten } from "../../utils/util";
+import {
+    divide,
+    identityLabel,
+} from "../../providers/investigation/identities";
+
+const MOCK_SOURCES = Object.fromEntries(
+    MOCK_DATA.sources.map((s) => [s.id, s]),
+);
+
+function sourcesOf(link) {
+    const { activeKey, runs } = useInvestigation.getState();
+    const known = activeKey ? runs[activeKey].sources : MOCK_SOURCES;
+    return (link.sourceIds || [])
+        .map((id) => known[id])
+        .filter(Boolean)
+        .map((source) => ({ title: source.title, url: source.url }));
+}
 
 export default function Graph() {
     const graphRef = useRef(null);
@@ -27,7 +49,32 @@ export default function Graph() {
     const [toggledLinks, setToggledLinks] = useState(() => new Set());
     const [hoveredLinkId, setHoveredLinkId] = useState(null);
 
-    const graphData = useMemo(() => transformData(MOCK_DATA), []);
+    const run = useActiveRun();
+    const live = run !== null;
+    const liveEntities = run?.entities;
+    const liveClaims = run?.claims;
+    const lastGraph = useRef({ nodes: [], links: [] });
+
+    const focus = run?.focus ?? null;
+    const focused = useMemo(() => {
+        if (!run || !focus) return null;
+        const { identities, groupOf } = divide(run);
+        const identity = identities.find((i) => i.id === focus);
+        return identity ? { identity, groupOf } : null;
+    }, [run, focus]);
+
+    const graphData = useMemo(() => {
+        let entities = live ? Object.values(liveEntities) : MOCK_DATA.entities;
+        if (focused)
+            entities = entities.filter((e) => focused.groupOf[e.id] === focus);
+
+        const next = transformData({
+            entities,
+            claims: live ? Object.values(liveClaims) : MOCK_DATA.claims,
+        });
+        lastGraph.current = reconcileGraph(lastGraph.current, next);
+        return lastGraph.current;
+    }, [live, liveEntities, liveClaims, focused, focus]);
 
     useEffect(() => {
         let animationFrameId;
@@ -178,13 +225,14 @@ export default function Graph() {
         openWindow({
             id: `node:${node.id}`,
             kind: "nodeInfo",
-            title: node.label,
+            title: shorten(node.label, 38),
             x: 0.2,
             y: 0.08,
             width: null,
             height: null,
             props: {
                 label: node.label,
+                type: node.type,
                 color: node.color,
                 description: node.description,
                 attributes: node.attributes,
@@ -214,21 +262,28 @@ export default function Graph() {
         // console.log(link.source);
         setSelectedLink(link);
 
+        // node labels can be whole headlines: the title bar gets a short
+        // "A → B", the window body has the full text.
+        const from = link.source?.label ?? "?";
+        const to = link.target?.label ?? "?";
+
         openWindow({
             id: `link:${link.id}`,
             kind: "linkInfo",
-            title: link.label ? link.label : "Link title",
+            title: `${shorten(from, 16)} → ${shorten(to, 16)}`,
             x: 0.4,
             y: 0.5,
             width: null,
             height: null,
             props: {
-                label: link.label ? link.label : "Link Info",
+                label: link.label ? link.label : "Link",
                 color: link.color,
-                source: link.source,
-                target: link.target,
+                sourceLabel: from,
+                targetLabel: to,
                 confidence: link.confidence,
-                attributes: link.attributes ? link.attributes : null,
+                status: link.status,
+                text: link.text,
+                sources: sourcesOf(link),
             },
         });
 
@@ -315,6 +370,23 @@ export default function Graph() {
                     updateLinkPosition(sprinte, coords, link, graphRef)
                 }
             />
+
+            {focused && (
+                <button
+                    type="button"
+                    onClick={() =>
+                        useInvestigation.getState().setFocus(run.key, null)
+                    }
+                    title="Show the whole graph again"
+                    className="absolute bottom-10 left-1/2 z-10 -translate-x-1/2 cursor-pointer rounded-full border border-white/20 bg-[rgba(15,15,20,0.85)] px-4 py-1.5 font-mono text-[11px] text-white backdrop-blur-[12px] hover:border-white/50"
+                >
+                    <span className="mr-2 uppercase tracking-[1px] text-[#ffd166]">
+                        {identityLabel(focused.identity)}
+                    </span>
+                    {shorten(focused.identity.name, 40)}
+                    <span className="ml-3 text-[#888]">show all ✕</span>
+                </button>
+            )}
 
             <div className="absolute bottom-10 left-6 w-[210px] h-[150px] bg-[rgba(15,15,20,0.85)] border border-white/15 rounded-xl backdrop-blur-[12px] shadow-[0_8px_32px_rgba(0,0,0,0.5)] z-10 flex flex-col items-center justify-center select-none">
                 <div className="absolute top-2 left-[10px] text-[9px] font-bold tracking-[0.8px] text-white/50 uppercase font-mono pointer-events-none">

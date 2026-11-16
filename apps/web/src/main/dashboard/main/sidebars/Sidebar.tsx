@@ -1,4 +1,5 @@
 import { SidebarLinks } from "./utils/SidebarLinks";
+import RunCards from "./RunCards";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { X } from "lucide-react";
@@ -64,29 +65,6 @@ export default function Sidebar() {
         },
     ];
 
-    const notifications_data = [
-        {
-            title: "Search",
-            summary: "/search",
-            progress: 50,
-        },
-        {
-            title: "Search",
-            summary: "/search",
-            progress: 50,
-        },
-        {
-            title: "Search",
-            summary: "/search",
-            progress: 50,
-        },
-        {
-            title: "Search",
-            summary: "/search",
-            progress: 50,
-        },
-    ];
-
     const [isCompact, setIsCompact] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
 
@@ -119,7 +97,10 @@ export default function Sidebar() {
                     Workspace
                 </span>
             </div>
-            <SidebarLinks data={links} />
+            <div className="shrink-0">
+                <SidebarLinks data={links} />
+            </div>
+            <RunCards />
         </div>
     );
 }

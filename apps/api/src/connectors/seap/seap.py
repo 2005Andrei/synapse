@@ -1,16 +1,22 @@
-import requests
 import json
-import time
+import logging
 import re
-import os
-import hashlib
-from typing import Dict, List, Optional
-from dataclasses import dataclass, asdict
-from datetime import datetime, date, timedelta
-import csv
-from dotenv import load_dotenv
+from dataclasses import asdict, dataclass
+from datetime import datetime
+from typing import Any
 
-load_dotenv()
+import httpx
+
+from connectors.common.cui import CuiLookupUnavailable, resolve_cui
+from connectors.common.http import ScraperCancelled, describe_error
+from connectors.common.text import fold
+from connectors.scraper import BaseScraper, ScrapeBatch, ScraperCategory
+from core.config import get_settings
+from models.ids import company_id, document_id, mention_id
+from models.schemas import Entity
+from models.types import EntityType, Predicate, SourceType
+
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -27,220 +33,120 @@ class Contract:
     status: str
     description: str
     source_url: str
+    # Which side of the contract the searched CUI is on, when known.
+    target_role: str = ""  # "supplier" | "authority" | ""
 
 
-@dataclass
-class CompanyInfo:
-    cui: str
-    name: str
-    address: str
-    total_contracts: int
-    total_value: float
-    first_contract_date: str
-    last_contract_date: str
+class ElicitatieScraper(BaseScraper):
+    """Public procurement contracts for a company (CUI or name).
 
+    Two upstreams: sicap.ai (needs SICAP_API_KEY; only finds the company as a
+    contracting authority) and the public e-licitatie.ro API (direct
+    acquisitions, filtered client-side because the API cannot filter by CUI).
+    """
 
-class ElicitatieScraper:
+    name = "seap"
+    label = "SEAP"
+    category = ScraperCategory.REGISTRY
+    source_type = SourceType.GOVERNMENT_DOCUMENT
+    description = "Public procurement contracts (e-licitatie.ro, optionally sicap.ai)"
+    confidence = 0.9
+    timeout = 30
+    accepts_cui = True
+    retries = 1
+    delay = 2.0
+    default_limit = 25  # contracts
+    headers = {
+        "Content-Type": "application/json;charset=UTF-8",
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "ro-RO,ro;q=0.9",
+    }
+
     BASE_URL = "http://e-licitatie.ro"
     API_BASE = "http://e-licitatie.ro/api-pub"
     SICAP_AI_BASE = "https://api.sicap.ai/v1"
 
-    def __init__(self, delay: float = 2.0):
-        self.delay = delay
-        self.sicap_api_key = os.getenv("SICAP_API_KEY", "").strip()
+    # The e-licitatie listing cannot be filtered by CUI, so finding a company
+    # means paging through every acquisition. Cap it: 100 rows and 2s per page.
+    max_pages = 5
+    page_size = 100
 
-        self.session = requests.Session()
-        self.session.headers.update(
-            {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-                "Content-Type": "application/json;charset=UTF-8",
-                "Accept": "application/json, text/plain, */*",
-                "Accept-Language": "ro-RO,ro;q=0.9",
-            }
-        )
+    def __init__(self) -> None:
+        super().__init__()
+        self.sicap_api_key = get_settings().sicap_api_key.strip()
+        self.elicitatie_error: str | None = None
 
-        if self.sicap_api_key:
-            print(f"API key loaded ({self.sicap_api_key[:8]}...)")
-        else:
-            print("No API key — will use e-licitatie.ro directly")
+    # --- sicap.ai ----------------------------------------------------------
+    def _sicap(self, path: str) -> Any:
+        if not self.sicap_api_key:
+            return None
+        try:
+            return self.http.get(
+                f"{self.SICAP_AI_BASE}{path}",
+                headers={"Authorization": f"Bearer {self.sicap_api_key}"},
+            ).json()
+        except ScraperCancelled:
+            raise
+        except (httpx.HTTPError, ValueError) as exc:
+            log.info("[seap] sicap.ai %s failed: %s", path, exc)
+            return None
 
-    def _get(
-        self, url: str, params: Dict = None, use_key: bool = False
-    ) -> requests.Response:
-        time.sleep(self.delay)
-        headers = {}
-        if use_key and self.sicap_api_key:
-            headers["Authorization"] = f"Bearer {self.sicap_api_key}"
-        response = self.session.get(url, params=params, headers=headers, timeout=30)
-        response.raise_for_status()
-        return response
-
-    def _post(self, url: str, body: Dict) -> requests.Response:
-        time.sleep(self.delay)
-        response = self.session.post(url, json=body, timeout=30)
-        response.raise_for_status()
-        return response
+    def _sicap_contracts(self, path: str, role: str = "") -> list[Contract]:
+        data = self._sicap(path)
+        if isinstance(data, dict):
+            data = data.get("items") or data.get("data") or data.get("contracts") or []
+        contracts = (self._parse_sicap_ai_contract(item, role) for item in data or [])
+        return [contract for contract in contracts if contract]
 
     def check_cui_exists(self, cif: str) -> bool:
-        if not self.sicap_api_key:
-            print("No API key available")
-            return False
-        try:
-            url = f"{self.SICAP_AI_BASE}/cui/{cif}/exists"
-            response = self._get(url, use_key=True)
-            data = response.json()
-            print(f"CUI check response: {data}")
-            return data.get("exists", False)
-        except Exception as e:
-            print(f"check_cui_exists failed: {e}")
-            return False
+        data = self._sicap(f"/cui/{cif}/exists")
+        return bool(isinstance(data, dict) and data.get("exists"))
 
-    def get_ac_contracts(self, cif: str) -> List[Contract]:
-        if not self.sicap_api_key:
-            print("No API key — skipping sicap.ai")
-            return []
+    def get_ac_contracts(self, cif: str) -> list[Contract]:
+        """Contracts where `cif` is the contracting authority."""
+        return self._sicap_contracts(f"/ac/{cif}/contracts", role="authority")
 
-        url = f"{self.SICAP_AI_BASE}/ac/{cif}/contracts"
-        contracts = []
-        try:
-            response = self._get(url, use_key=True)
-            data = response.json()
-            print(
-                f"ac/contracts raw response keys: {list(data.keys()) if isinstance(data, dict) else type(data)}"
-            )
+    def get_ac_contracts_latest(self, cif: str) -> list[Contract]:
+        return self._sicap_contracts(f"/ac/{cif}/contracts/latest", role="authority")
 
-            items = (
-                data
-                if isinstance(data, list)
-                else data.get("items", data.get("data", data.get("contracts", [])))
-            )
+    def get_contracts_by_date(self, target_date: str) -> list[Contract]:
+        return self._sicap_contracts(f"/contracts/daily/{target_date}")
 
-            for item in items:
-                c = self._parse_sicap_ai_contract(item)
-                if c:
-                    contracts.append(c)
+    def get_contract_by_id(self, source: str, contract_id: str) -> Contract | None:
+        return self._parse_sicap_ai_contract(
+            self._sicap(f"/contracts/{source}/{contract_id}")
+        )
 
-        except Exception as e:
-            print(f"get_ac_contracts failed: {e}")
-
-        return contracts
-
-    def get_ac_contracts_latest(self, cif: str) -> List[Contract]:
-        if not self.sicap_api_key:
-            return []
-
-        url = f"{self.SICAP_AI_BASE}/ac/{cif}/contracts/latest"
-        contracts = []
-        try:
-            response = self._get(url, use_key=True)
-            data = response.json()
-            print(
-                f"ac/contracts/latest raw response keys: {list(data.keys()) if isinstance(data, dict) else type(data)}"
-            )
-
-            items = (
-                data
-                if isinstance(data, list)
-                else data.get("items", data.get("data", data.get("contracts", [])))
-            )
-
-            for item in items:
-                c = self._parse_sicap_ai_contract(item)
-                if c:
-                    contracts.append(c)
-
-        except Exception as e:
-            print(f"get_ac_contracts_latest failed: {e}")
-
-        return contracts
-
-    def get_contracts_by_date(self, target_date: str) -> List[Contract]:
-        if not self.sicap_api_key:
-            return []
-
-        url = f"{self.SICAP_AI_BASE}/contracts/daily/{target_date}"
-        contracts = []
-        try:
-            response = self._get(url, use_key=True)
-            data = response.json()
-            print(
-                f"daily/{target_date} response keys: {list(data.keys()) if isinstance(data, dict) else type(data)}"
-            )
-
-            items = (
-                data
-                if isinstance(data, list)
-                else data.get("items", data.get("data", []))
-            )
-
-            for item in items:
-                c = self._parse_sicap_ai_contract(item)
-                if c:
-                    contracts.append(c)
-
-        except Exception as e:
-            print(f"get_contracts_by_date failed: {e}")
-
-        return contracts
-
-    def get_contract_by_id(self, source: str, contract_id: str) -> Optional[Contract]:
-        if not self.sicap_api_key:
-            return None
-
-        url = f"{self.SICAP_AI_BASE}/contracts/{source}/{contract_id}"
-        try:
-            response = self._get(url, use_key=True)
-            data = response.json()
-            return self._parse_sicap_ai_contract(data)
-        except Exception as e:
-            print(f"get_contract_by_id failed: {e}")
-            return None
-
-    def _parse_sicap_ai_contract(self, item: Dict) -> Optional[Contract]:
+    def _parse_sicap_ai_contract(self, item: Any, role: str = "") -> Contract | None:
         if not item or not isinstance(item, dict):
             return None
-        try:
-            return Contract(
-                contract_id=str(item.get("id", item.get("contractId", ""))),
-                title=item.get(
-                    "name", item.get("title", item.get("contractTitle", ""))
-                ),
-                contracting_authority=item.get(
-                    "contractingAuthority",
-                    item.get("authority", item.get("caName", "")),
-                ),
-                supplier=item.get(
-                    "supplier", item.get("winner", item.get("supplierName", ""))
-                ),
-                contract_value=self._parse_value(
-                    str(
-                        item.get(
-                            "value", item.get("closingValue", item.get("amount", 0))
-                        )
-                    )
-                ),
-                currency=item.get("currency", "RON"),
-                contract_date=item.get(
-                    "date", item.get("contractDate", item.get("publicationDate", ""))
-                ),
-                procedure_type=item.get("procedureType", item.get("type", "")),
-                cpv_code=item.get("cpvCode", item.get("cpv", "")),
-                status=item.get("status", ""),
-                description=item.get("description", ""),
-                source_url=item.get("url", item.get("sourceUrl", "")),
-            )
-        except Exception as e:
-            print(f"Error parsing sicap.ai contract: {e}")
-            return None
 
+        def first(*keys: str, default: Any = "") -> Any:
+            return next((item[key] for key in keys if item.get(key)), default)
+
+        return Contract(
+            contract_id=str(first("id", "contractId")),
+            title=first("name", "title", "contractTitle"),
+            contracting_authority=first("contractingAuthority", "authority", "caName"),
+            supplier=first("supplier", "winner", "supplierName"),
+            contract_value=self._parse_value(first("value", "closingValue", "amount", default=0)),
+            currency=first("currency", default="RON"),
+            contract_date=first("date", "contractDate", "publicationDate"),
+            procedure_type=first("procedureType", "type"),
+            cpv_code=first("cpvCode", "cpv"),
+            status=first("status"),
+            description=first("description"),
+            source_url=first("url", "sourceUrl"),
+            target_role=role,
+        )
+
+    # --- e-licitatie.ro ----------------------------------------------------
     def search_elicitatie_by_cui(
         self, cui: str, date_start: str = "2022-01-01"
-    ) -> List[Contract]:
-        print(f"Searching e-licitatie.ro for CUI: {cui} (from {date_start})")
+    ) -> list[Contract]:
         url = f"{self.API_BASE}/DirectAcquisitionCommon/GetDirectAcquisitionList/"
-
         body = {
-            "pageSize": 100,
+            "pageSize": self.page_size,
             "pageIndex": 0,
             "showOngoingDa": False,
             "cookieContext": None,
@@ -250,243 +156,161 @@ class ElicitatieScraper:
             "finalizationDateStart": date_start,
             "finalizationDateEnd": datetime.now().strftime("%Y-%m-%d"),
         }
+        contracts: list[Contract] = []
 
-        contracts = []
-        page = 0
-
-        while True:
+        for page in range(self.max_pages):
             body["pageIndex"] = page
-            try:
-                response = self._post(url, body)
-                data = response.json()
-            except Exception as e:
-                print(f"e-licitatie.ro error page {page}: {e}")
-                break
+            data = self.http.post(url, json=body).json()
+            items = data.get("items") or []
 
-            items = data.get("items", [])
-            if not items:
-                break
-
-            matched = 0
             for item in items:
-                supplier_cui = str(
-                    item.get("supplierId", "") or item.get("winnerFiscalNumber", "")
-                )
-                authority_cui = str(
-                    item.get("contractingAuthorityId", "")
-                    or item.get("cAFiscalNumber", "")
-                )
+                supplier_cui = str(item.get("supplierId") or item.get("winnerFiscalNumber") or "")
+                authority_cui = str(item.get("contractingAuthorityId") or item.get("cAFiscalNumber") or "")
+                role = "supplier" if cui in supplier_cui else "authority" if cui in authority_cui else ""
+                if role:
+                    contracts.append(self._parse_direct_acquisition(item, role))
 
-                if cui in supplier_cui or cui in authority_cui:
-                    contract = self._parse_direct_acquisition(item)
-                    if contract:
-                        contracts.append(contract)
-                        matched += 1
-
-            total = data.get("total", 0)
-            fetched = (page + 1) * body["pageSize"]
-            print(
-                f"  Page {page}: {len(items)} items scanned, {matched} matched (total available: {total})"
-            )
-
-            if fetched >= total or len(items) < body["pageSize"]:
+            fetched = (page + 1) * self.page_size
+            log.info("[seap] page %s: %s rows, %s matches so far", page, len(items), len(contracts))
+            if len(items) < self.page_size or fetched >= data.get("total", 0):
                 break
-            page += 1
 
         return contracts
 
-    def _parse_direct_acquisition(self, item: Dict) -> Optional[Contract]:
-        try:
-            return Contract(
-                contract_id=str(item.get("directAcquisitionId", item.get("id", ""))),
-                title=item.get("directAcquisitionName", item.get("name", "")),
-                contracting_authority=item.get("contractingAuthorityName", ""),
-                supplier=item.get("supplierName", item.get("winnerName", "")),
-                contract_value=self._parse_value(
-                    str(item.get("closingValue", item.get("totalAmount", 0)))
-                ),
-                currency=item.get("currency", "RON"),
-                contract_date=item.get(
-                    "finalizationDate", item.get("publicationDate", "")
-                ),
-                procedure_type="Achizitie directa",
-                cpv_code=item.get("cpvCode", item.get("cpvCodeAndName", "")),
-                status=item.get("sysDirectAcquisitionState", {}).get("text", "")
-                if isinstance(item.get("sysDirectAcquisitionState"), dict)
-                else "",
-                description=item.get("description", ""),
-                source_url=f"{self.BASE_URL}/pub/direct-acquisition/view/{item.get('directAcquisitionId', '')}",
-            )
-        except Exception as e:
-            print(f"Error parsing contract: {e}")
-            return None
-
-    def _resolve_cui(self, target: str) -> Optional[str]:
-        cui_curat = target.upper().replace("RO", "").strip()
-        if cui_curat.isdigit():
-            return cui_curat
-
-        print(f"Target non-numeric, caut CUI dupa nume: {target}")
-        try:
-            r = self.session.get(
-                f"https://demoanaf.ro/api/search?q={target}",
-                timeout=15,
-            )
-            r.raise_for_status()
-            rezultate = r.json()
-            firme = rezultate.get("data", rezultate)
-            if isinstance(firme, list) and firme:
-                cui = str(firme[0].get("cui", firme[0].get("CUI", "")))
-                if cui:
-                    print(f'Gasit CUI {cui} pentru "{target}"')
-                    return cui
-        except Exception as e:
-            print(f"Rezolvare CUI dupa nume esuata: {e}")
-
-        print(f'Nu s-a gasit niciun CUI pentru "{target}"')
-        return None
-
-    def search_by_cui(self, cui: str, date_start: str = "2022-01-01") -> List[Contract]:
-        contracts = []
-
-        if self.sicap_api_key:
-            print(f"\n[1/3] Checking CUI {cui} on sicap.ai...")
-            exists = self.check_cui_exists(cui)
-            print(f"CUI exists: {exists}")
-
-            print(f"\n[2/3] Getting contracts where {cui} is contracting authority...")
-            ac_contracts = self.get_ac_contracts(cui)
-            print(f"Found {len(ac_contracts)} contracts as authority")
-            contracts.extend(ac_contracts)
-
-            if not contracts:
-                print(f"\nNote: /ac/ endpoints cauta firma ca AUTORITATE CONTRACTANTA.")
-                print(
-                    f"Daca firma e FURNIZOR, /v1/supplier/:cif/contracts e Enterprise (2000 credite)."
-                )
-
-        print(f"\n[3/3] Searching e-licitatie.ro directly (free, no key needed)...")
-        elicitatie_contracts = self.search_elicitatie_by_cui(cui, date_start=date_start)
-        print(f"Found {len(elicitatie_contracts)} contracts on e-licitatie.ro")
-
-        seen_ids = {c.contract_id for c in contracts}
-        for c in elicitatie_contracts:
-            if c.contract_id not in seen_ids:
-                contracts.append(c)
-                seen_ids.add(c.contract_id)
-
-        return contracts
-
-    def get_company_summary(self, cui: str) -> CompanyInfo:
-        contracts = self.search_by_cui(cui)
-        if not contracts:
-            return CompanyInfo(
-                cui=cui,
-                name="",
-                address="",
-                total_contracts=0,
-                total_value=0.0,
-                first_contract_date="",
-                last_contract_date="",
-            )
-
-        total_value = sum(c.contract_value for c in contracts)
-        dates = sorted([c.contract_date for c in contracts if c.contract_date])
-        name = next((c.supplier or c.contracting_authority for c in contracts), "")
-
-        return CompanyInfo(
-            cui=cui,
-            name=name,
-            address="",
-            total_contracts=len(contracts),
-            total_value=total_value,
-            first_contract_date=dates[0] if dates else "",
-            last_contract_date=dates[-1] if dates else "",
+    def _parse_direct_acquisition(self, item: dict, role: str = "") -> Contract:
+        state = item.get("sysDirectAcquisitionState")
+        acquisition_id = item.get("directAcquisitionId", item.get("id", ""))
+        return Contract(
+            contract_id=str(acquisition_id),
+            title=item.get("directAcquisitionName") or item.get("name") or "",
+            contracting_authority=item.get("contractingAuthorityName") or "",
+            supplier=item.get("supplierName") or item.get("winnerName") or "",
+            contract_value=self._parse_value(item.get("closingValue", item.get("totalAmount", 0))),
+            currency=item.get("currency") or "RON",
+            contract_date=item.get("finalizationDate") or item.get("publicationDate") or "",
+            procedure_type="Achizitie directa",
+            cpv_code=item.get("cpvCode") or item.get("cpvCodeAndName") or "",
+            status=state.get("text", "") if isinstance(state, dict) else "",
+            description=item.get("description") or "",
+            source_url=f"{self.BASE_URL}/pub/direct-acquisition/view/{acquisition_id}",
+            target_role=role,
         )
 
-    def _parse_value(self, value_str: str) -> float:
-        cleaned = re.sub(r"[^\d.,]", "", str(value_str))
-        cleaned = cleaned.replace(".", "").replace(",", ".")
+    @staticmethod
+    def _parse_value(value: Any) -> float:
+        if isinstance(value, (int, float)):
+            return float(value)
+        # "1.234.567,89" -> 1234567.89
+        cleaned = re.sub(r"[^\d.,]", "", str(value)).replace(".", "").replace(",", ".")
         try:
             return float(cleaned)
         except ValueError:
             return 0.0
 
-    def search(self, target: str, date_start: str = "2022-01-01"):
-        cui = self._resolve_cui(target)
+    def search_by_cui(self, cui: str, date_start: str = "2022-01-01") -> list[Contract]:
+        contracts = self.get_ac_contracts(cui)
+        seen = {contract.contract_id for contract in contracts}
+        try:
+            direct = self.search_elicitatie_by_cui(cui, date_start=date_start)
+        except httpx.HTTPError as exc:
+            # e-licitatie.ro turns automated clients away at times. That only
+            # sinks the scraper when sicap.ai had nothing either.
+            self.elicitatie_error = describe_error(exc)
+            if not contracts:
+                raise
+            direct = []
+        for contract in direct:
+            if contract.contract_id not in seen:
+                seen.add(contract.contract_id)
+                contracts.append(contract)
+        return contracts
 
+    # --- scrape ------------------------------------------------------------
+    def scrape(self, query: str, limit: int, out: ScrapeBatch) -> None:
+        try:
+            cui = resolve_cui(self.http, query)
+        except CuiLookupUnavailable as exc:
+            out.note(str(exc))
+            return
         if not cui:
-            return {
-                "source": "seap/sicap scraper",
-                "type": "document",
-                "certainty": "0",
-                "metadata": {
-                    "timestamp": datetime.now().isoformat(),
-                    "source": "SEAP/SICAP / e-licitatie.ro",
-                    "count": 0,
-                },
-                "nodes": [],
-            }
+            return
 
-        contracts = self.search_by_cui(cui, date_start=date_start)
+        contracts = self.search_by_cui(cui)
+        if self.elicitatie_error:
+            out.note(f"direct acquisitions unavailable: {self.elicitatie_error}")
+        out.metadata.update(
+            cui=cui,
+            contracts=len(contracts),
+            total_value=sum(contract.contract_value for contract in contracts),
+            sicap_ai=bool(self.sicap_api_key),
+            max_pages=self.max_pages,
+        )
 
-        graph_nodes = []
-        seen_suppliers = set()
-
-        if contracts:
-            print("yes")
-        else:
-            print("no lmao lmao")
-
-        for contract in contracts:
-            supplier_key = contract.supplier or "unknown"
-            if supplier_key not in seen_suppliers:
-                seen_suppliers.add(supplier_key)
-                supplier_id = hashlib.md5(
-                    f"{supplier_key}_{contract.contracting_authority}".encode()
-                ).hexdigest()
-
-                thing = {
-                    "id": f"person_{supplier_id}",
-                    "type": "Person",
-                    "label": supplier_key,
-                    "summary": f"Furnizor la {contract.contracting_authority}"
-                    if contract.contracting_authority
-                    else "Furnizor",
-                    "url": "N/A",
-                }
-                print("over here: " + str(thing))
-
-                graph_nodes.append(
-                    {
-                        "id": f"person_{supplier_id}",
-                        "type": "Person",
-                        "label": supplier_key,
-                        "summary": f"Furnizor la {contract.contracting_authority}"
-                        if contract.contracting_authority
-                        else "Furnizor",
-                        "url": "N/A",
-                    }
-                )
-
-            graph_nodes.append(
-                {
-                    "id": f"contract_{contract.contract_id}",
-                    "type": "Document",
-                    "label": contract.title or f"Contract {contract.contract_id}",
-                    "summary": f"{contract.procedure_type} • {contract.contract_value:,.2f} {contract.currency} • {contract.contract_date}",
-                    "url": contract.source_url,
-                }
+        for contract in contracts[:limit]:
+            title = contract.title or f"Contract {contract.contract_id}"
+            url = contract.source_url or f"{self.BASE_URL}/"
+            source = out.source(
+                url=url,
+                title=title,
+                content=json.dumps(asdict(contract), ensure_ascii=False),
+                published_at=contract.contract_date or None,
+                key=f"seap:{contract.contract_id}",
+            )
+            document = out.entity(
+                document_id(f"seap:{contract.contract_id}"),
+                EntityType.DOCUMENT,
+                title,
+                description=(
+                    f"{contract.procedure_type} • {contract.contract_value:,.2f} "
+                    f"{contract.currency} • {contract.contract_date}"
+                ),
+                document_type="procurement contract",
+                contract_id=contract.contract_id,
+                value=contract.contract_value,
+                currency=contract.currency,
+                date=contract.contract_date,
+                procedure_type=contract.procedure_type,
+                cpv_code=contract.cpv_code,
+                status=contract.status,
+                contracting_authority=contract.contracting_authority,
+                supplier=contract.supplier,
+                url=url,
+                source_id=str(source.id),
             )
 
-        return {
-            "source": "SEAP/SICAP scraper",
-            "type": "document",
-            "certainty": "0",
-            "metadata": {
-                "timestamp": datetime.now().isoformat(),
-                "source": "SEAP / e-licitatie.ro + SICAP AI",
-                "count": len(graph_nodes),
-            },
-            "nodes": graph_nodes,
-        }
+            supplier = self._party(out, contract.supplier, cui, contract.target_role == "supplier")
+            authority = self._party(
+                out, contract.contracting_authority, cui, contract.target_role == "authority"
+            )
+            amount = f"{contract.contract_value:,.2f} {contract.currency}"
+            if supplier:
+                out.claim(
+                    supplier,
+                    Predicate.WON_CONTRACT,
+                    f"{contract.supplier} a câștigat contractul „{title}” ({amount}).",
+                    document,
+                    sources=[source],
+                )
+            if authority:
+                out.claim(
+                    authority,
+                    "Awarded",
+                    f"{contract.contracting_authority} a atribuit contractul „{title}” ({amount}).",
+                    document,
+                    sources=[source],
+                )
+
+    def _party(self, out: ScrapeBatch, name: str, cui: str, is_target: bool) -> Entity | None:
+        """The searched company gets its registry-wide id; counterparties are
+        only known by name here."""
+        if not name and not is_target:
+            return None
+        if is_target:
+            return out.entity(
+                company_id(cui), EntityType.ORGANIZATION, name or f"CUI {cui}", cui=cui
+            )
+        return out.entity(
+            mention_id(self.name, EntityType.ORGANIZATION, fold(name)),
+            EntityType.ORGANIZATION,
+            name,
+        )

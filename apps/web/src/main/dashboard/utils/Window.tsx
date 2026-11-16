@@ -115,13 +115,19 @@ export function Window({
                 )}
             >
                 <div
-                    className="win-handle flex h-8 shrink-0 cursor-all-scroll select-none items-center justify-between px-3 text-xs font-medium"
+                    className="win-handle flex h-8 shrink-0 cursor-all-scroll select-none items-center justify-between gap-3 px-3 text-xs font-medium"
                     onDoubleClick={() => toggleMax(id)}
                 >
-                    <span className={cn(!focused && "text-muted-foreground")}>
+                    <span
+                        className={cn(
+                            "min-w-0 truncate",
+                            !focused && "text-muted-foreground",
+                        )}
+                        title={w.title}
+                    >
                         {w.title}
                     </span>
-                    <div className="no-drag flex gap-1">
+                    <div className="no-drag flex shrink-0 gap-1">
                         <button
                             onClick={() => toggleMin(id)}
                             className="rounded p-1 hover:bg-accent hover:cursor-pointer"

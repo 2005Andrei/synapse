@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import SpriteText from "three-spritetext";
+import { shorten } from "../../../utils/util";
 
 const SPHERE_GEO = new THREE.SphereGeometry(1, 32, 32);
 const noRaycast = () => {};
@@ -76,7 +77,7 @@ function getMaterial(type, color, opacity = 1) {
 
 function getLabel(node) {
     if (!labelCache.has(node.id)) {
-        const s = new SpriteText(node.label);
+        const s = new SpriteText(shorten(node.label, 48));
         s.color = "#ffffff";
         s.fontFace = "Inter, system-ui, sans-serif";
         s.fontWeight = "600";

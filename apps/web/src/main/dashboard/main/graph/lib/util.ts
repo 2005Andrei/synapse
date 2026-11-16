@@ -1,5 +1,18 @@
 import { ENTITY_COLORS, LINK_COLORS } from "../config";
 
+const NODE_BASE_SIZE = 4;
+const NODE_MAX_SIZE = 11;
+
+// radius of a node with `degree` links. logarithmic, so a hub is visibly a
+// hub without swallowing its neighbours: 1 link -> 5.5, 10 -> 9.2, and
+// anything past ~25 links stops growing at 11
+export function nodeSize(degree) {
+    return Math.min(
+        NODE_MAX_SIZE,
+        NODE_BASE_SIZE + 1.5 * Math.log2(1 + degree),
+    );
+}
+
 // this function should not add much overhead, O(N + L), N, L = nodes, links is the complexity which should be fine
 // what is challenging is the physics engine
 export function transformData(data) {
@@ -12,7 +25,7 @@ export function transformData(data) {
         description: e.description,
         attributes: e.attributes,
         color: ENTITY_COLORS[e.type] || ENTITY_COLORS.Default,
-        val: 4, // size
+        val: NODE_BASE_SIZE, // size; grows with the number of links, see below
     }));
 
     const validNodeIds = new Set(nodes.map((n) => n.id));
@@ -40,6 +53,9 @@ export function transformData(data) {
                             label,
                             confidence: claim.confidence ?? 1.0,
                             color: LINK_COLORS.Default,
+                            text: claim.claim_text,
+                            status: claim.claim_status,
+                            sourceIds: claim.source_ids ?? [],
                         });
                     }
                 });
@@ -56,6 +72,9 @@ export function transformData(data) {
                     label,
                     confidence: claim.confidence ?? 1.0,
                     color: LINK_COLORS.Default,
+                    text: claim.claim_text,
+                    status: claim.claim_status,
+                    sourceIds: claim.source_ids ?? [],
                 });
             }
         }
@@ -68,8 +87,17 @@ export function transformData(data) {
     });
 
     nodes.forEach((n) => {
-        n.val += degreeMap.get(n.id) || 0;
+        n.val = nodeSize(degreeMap.get(n.id) || 0);
     });
 
     return { nodes, links };
+}
+
+export function reconcileGraph(prev, next) {
+    const known = new Map(prev.nodes.map((n) => [n.id, n]));
+    const nodes = next.nodes.map((n) => {
+        const existing = known.get(n.id);
+        return existing ? Object.assign(existing, n) : n;
+    });
+    return { nodes, links: next.links };
 }

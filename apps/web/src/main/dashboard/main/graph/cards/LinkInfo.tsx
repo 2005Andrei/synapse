@@ -1,57 +1,70 @@
+import { CopyLink } from "../../../utils/CopyLink";
+
 type Props = {
     label: string;
     color?: string;
-    source?: Object;
-    target?: Object;
-    confidence?: Number;
-    attributes?: Record<string, unknown>;
+    sourceLabel: string;
+    targetLabel: string;
+    confidence?: number;
+    status?: string;
+    text?: string;
+    sources?: { title: string; url: string }[];
 };
 
 export default function LinkInfo({
     label,
     color,
-    source,
-    target,
+    sourceLabel,
+    targetLabel,
     confidence,
-    attributes = {},
+    status,
+    text,
+    sources = [],
 }: Props) {
     return (
-        <div className="w-80 p-5 text-[#ececec] font-mono">
-            <div className="flex justify-center items-center mb-[15px]">
-                <h3 className="m-0" style={{ color }}>
-                    {label}
-                </h3>
-            </div>
-
-            <div className="text-[12px] text-[#aaa] mb-[15px] border-b border-[#333] pb-[15px]">
-                {source.label} {label} {target.label}
-                <br />
-                <span className="text-sm text-gray-500">
-                    {confidence.toString()}
-                </span>
-            </div>
-
-            <div className="text-[12px]">
+        <div className="w-80 p-5 text-[#ececec] font-mono text-[12px]">
+            <div className="mb-[15px] border-b border-[#333] pb-[15px]">
+                <div className="break-words text-white">{sourceLabel}</div>
                 <div
-                    className="mb-2 uppercase tracking-[1px]"
+                    className="my-1 uppercase tracking-[1px]"
                     style={{ color }}
                 >
-                    Attributes
+                    {label} →
                 </div>
-                {attributes != null &&
-                    Object.entries(attributes).map(([key, value]) => (
-                        <div key={key} className="mb-[6px] flex flex-col">
-                            <span className="text-[#888]">
-                                {key.replace(/_/g, " ")}:
-                            </span>
-                            <span className="text-white">
-                                {Array.isArray(value)
-                                    ? value.join(", ")
-                                    : String(value)}
-                            </span>
-                        </div>
-                    ))}
+                <div className="break-words text-white">{targetLabel}</div>
             </div>
+
+            {text && (
+                <div className="mb-[15px] break-words text-[#aaa]">{text}</div>
+            )}
+
+            <div className="mb-[15px] text-[#888]">
+                {[
+                    status,
+                    confidence !== undefined &&
+                        `confidence ${Math.round(confidence * 100)}%`,
+                ]
+                    .filter(Boolean)
+                    .join(" · ")}
+            </div>
+
+            <div className="mb-2 uppercase tracking-[1px]" style={{ color }}>
+                Sources
+            </div>
+            {sources.length === 0 && (
+                <div className="text-[#888]">No source recorded.</div>
+            )}
+            {sources.map((source) => (
+                <div key={source.url} className="mb-2">
+                    <div
+                        className="line-clamp-2 break-words text-white"
+                        title={source.title}
+                    >
+                        {source.title}
+                    </div>
+                    <CopyLink url={source.url} />
+                </div>
+            ))}
         </div>
     );
 }
