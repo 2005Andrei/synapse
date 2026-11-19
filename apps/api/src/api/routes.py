@@ -1,5 +1,5 @@
 from collections.abc import AsyncIterable
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Header, HTTPException, Query, Request
 from fastapi.sse import EventSourceResponse, ServerSentEvent
@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 from api.deps import Bus, CurrentRun, Queue, Runs
 from connectors.registry import SCRAPERS, list_scrapers
 from connectors.scraper import ScraperInfo
+from core.config import get_settings
 from core.events import EventType, parse_last_event_id
 from core.runs import Run, fail_if_orphaned
 from workers.tasks import RUN_INVESTIGATION
@@ -18,11 +19,34 @@ router = APIRouter(prefix="/api")
 sse_poll_ms = 5000
 
 
+class SeedEntity(BaseModel):
+    """An entity of an existing graph, as the browser holds it."""
+
+    id: str
+    type: str
+    aliases: list[str] = Field(min_length=1)
+    description: str = ""
+    attributes: dict[str, Any] = Field(default_factory=dict)
+
+
+class LlmChoice(BaseModel):
+    """The model a user wants this search to use, with their own key."""
+
+    model: str = Field(min_length=3, max_length=120, description='langchain "provider:model"')
+    api_key: str | None = Field(default=None, max_length=400)
+    base_url: str | None = Field(default=None, max_length=300)
+
+
 class InvestigationRequest(BaseModel):
     query: str = Field(min_length=2, max_length=200)
     scrapers: list[str] | None = Field(
         default=None, description="Scraper names to run; omit to run all of them."
     )
+    parent_id: str | None = Field(
+        default=None, description="Search further inside this run's graph instead of starting a new one."
+    )
+    seed: SeedEntity | None = Field(default=None, description="With parent_id: the entity to search further.")
+    llm: LlmChoice | None = None
 
 
 @router.get("/health")
@@ -50,7 +74,25 @@ async def create_investigation(
     if unknown:
         raise HTTPException(422, f"unknown scrapers: {', '.join(unknown)}")
 
-    run = await runs.create(Run(query=query, scrapers=names))
+    settings = get_settings()
+    if body.parent_id and await runs.get(body.parent_id) is None:
+        raise HTTPException(404, "the search to extend was not found (expired?)")
+    if body.llm and not settings.allow_user_llm:
+        raise HTTPException(403, "this server does not accept a model chosen by the user")
+
+    run = Run(
+        query=query,
+        scrapers=names,
+        parent_id=body.parent_id,
+        seed=body.seed.model_dump() if body.seed and body.parent_id else None,
+        llm=body.llm.model if body.llm else None,
+    )
+    if body.llm:
+        secret = {"api_key": body.llm.api_key or ""}
+        if body.llm.base_url and settings.allow_user_llm_base_url:
+            secret["base_url"] = body.llm.base_url
+        await runs.put_secret(run.id, secret)
+    await runs.create(run)
     await bus.publish(run.id, EventType.RUN_QUEUED, {"query": query, "scrapers": names})
     await queue.enqueue_job(RUN_INVESTIGATION, run.id, _job_id=run.id)
     return run

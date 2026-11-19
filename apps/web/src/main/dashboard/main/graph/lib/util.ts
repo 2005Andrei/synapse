@@ -56,6 +56,7 @@ export function transformData(data) {
                             text: claim.claim_text,
                             status: claim.claim_status,
                             sourceIds: claim.source_ids ?? [],
+                            quote: claim.quote ?? undefined,
                         });
                     }
                 });
@@ -75,6 +76,7 @@ export function transformData(data) {
                     text: claim.claim_text,
                     status: claim.claim_status,
                     sourceIds: claim.source_ids ?? [],
+                            quote: claim.quote ?? undefined,
                 });
             }
         }

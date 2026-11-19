@@ -18,6 +18,10 @@ def run_events_key(run_id: str) -> str:
     return f"{PREFIX}:run:{run_id}:events"
 
 
+def run_secret_key(run_id: str) -> str:
+    return f"{PREFIX}:run:{run_id}:secret"
+
+
 def run_heartbeat_key(run_id: str) -> str:
     return f"{PREFIX}:run:{run_id}:heartbeat"
 

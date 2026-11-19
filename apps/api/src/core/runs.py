@@ -3,6 +3,7 @@
 Created by the API, then only the worker that picked up the job writes to it.
 """
 
+import json
 import time
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -14,7 +15,7 @@ from redis.asyncio import Redis
 
 from core.config import get_settings
 from core.events import EventBus, EventType
-from core.redis import RUNS_INDEX, run_heartbeat_key, run_key
+from core.redis import RUNS_INDEX, run_heartbeat_key, run_key, run_secret_key
 
 
 def utcnow() -> str:
@@ -42,6 +43,15 @@ class Run(BaseModel):
     finished_at: str | None = None
     error: str | None = None
     stats: dict[str, Any] = Field(default_factory=dict)
+
+    # A search that extends another one ("search further"): its results belong
+    # to the parent's graph, and `seed` is the entity of that graph it is about.
+    parent_id: str | None = None
+    seed: dict[str, Any] | None = None
+    origin: str = "user"  # "user" | "auto" (started by the pipeline itself)
+    reason: str | None = None
+    # Model asked for by the user for this search. Never the key: see `put_secret`.
+    llm: str | None = None
 
 
 class RunStore:
@@ -87,6 +97,17 @@ class RunStore:
         """Take a run off the recent list. Its data stays until it expires, so
         a worker still busy with it is not disturbed."""
         await self.redis.zrem(RUNS_INDEX, run_id)
+
+    # --- secrets -----------------------------------------------------------
+    async def put_secret(self, run_id: str, secret: dict[str, str]) -> None:
+        """A user's API key for this run. Kept apart from the run document
+        (which the API returns to anyone who asks) and only until the worker
+        takes it."""
+        await self.redis.set(run_secret_key(run_id), json.dumps(secret), ex=get_settings().job_timeout_seconds)
+
+    async def take_secret(self, run_id: str) -> dict[str, str] | None:
+        raw = await self.redis.getdel(run_secret_key(run_id))
+        return json.loads(raw) if raw else None
 
     # --- liveness ----------------------------------------------------------
     async def beat(self, run_id: str) -> None:

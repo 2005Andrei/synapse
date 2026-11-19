@@ -33,12 +33,23 @@ def resolve_cui(http: HttpClient, target: str) -> str | None:
     if cui:
         return cui
 
+    # Imported here: the index module needs settings, this module is imported everywhere.
+    from connectors.onrc.index import get_index
+
+    index = get_index()
+    if index is not None:
+        firms = [firm for firm in index.search_firms(target, 1) if firm.cui]
+        if firms:
+            log.info("resolved %r to CUI %s (%s) in the ONRC index", target, firms[0].cui, firms[0].name)
+            return firms[0].cui
+
     try:
         results = http.get(f"{DEMOANAF_API}/search", params={"q": target}).json()
     except (httpx.HTTPError, ValueError) as exc:
         log.info("CUI lookup for %r failed: %s", target, exc)
         raise CuiLookupUnavailable(
-            f"company-name lookup unavailable: {describe_error(exc)}; search by CUI instead"
+            f"company-name lookup unavailable: {describe_error(exc)}; search by CUI, "
+            "or build the ONRC index (`just onrc-import`)"
         ) from exc
 
     companies = results.get("data", results) if isinstance(results, dict) else results

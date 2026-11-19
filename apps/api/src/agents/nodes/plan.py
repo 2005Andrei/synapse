@@ -33,8 +33,10 @@ async def plan(
     scrapers accordingly. For now every requested scraper runs.
     """
     query = state["query"]
-    cui = parse_cui(query)
     scrapers = [name for name in state.get("scrapers") or registry.SCRAPERS if name in registry.SCRAPERS]
+    if state.get("seed"):
+        return await _search_further(state["seed"], query, scrapers, runtime)
+    cui = parse_cui(query)
 
     company = await _company_name(cui) if cui and "anaf" in scrapers else None
     name_query = search_name(company) if company else query
@@ -66,6 +68,32 @@ async def plan(
         "iteration": 0,
         "done": False,
     }
+
+
+async def _search_further(
+    seed: dict[str, Any], query: str, scrapers: list[str], runtime: Runtime[PipelineContext]
+) -> dict[str, Any]:
+    """The run is about an entity an earlier search found. It keeps that
+    entity's id, so everything found now attaches to the same node."""
+    cui = (seed.get("attributes") or {}).get("cui") if seed["type"] == EntityType.ORGANIZATION.value else None
+    update: dict[str, Any] = {
+        "seed_id": seed["id"],
+        "scrapers": scrapers,
+        "name_query": search_name(query) if seed["type"] == EntityType.ORGANIZATION.value else _without_initials(query),
+        "entities": {seed["id"]: seed},
+        "iteration": 0,
+        "done": False,
+    }
+    if cui:  # registries by fiscal code, courts and press by name
+        update["registry_query"] = str(cui)
+    await runtime.context.emit(EventType.GRAPH_PATCH, graph_patch("plan", entities=[seed], seed_id=seed["id"]))
+    return update
+
+
+def _without_initials(name: str) -> str:
+    """"PAVĂL I. DRAGOŞ" -> "PAVĂL DRAGOŞ": the register's spelling finds nothing in the press."""
+    words = [word for word in name.replace(".", " ").split() if len(word) > 1]
+    return " ".join(words) if len(words) > 1 else name
 
 
 async def _company_name(cui: str) -> str | None:

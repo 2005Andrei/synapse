@@ -10,11 +10,13 @@ from connectors.news.adevarul import AdevarulScraper
 from connectors.news.digi24 import Digi24Scraper
 from connectors.news.g4media import G4MediaScraper
 from connectors.news.hotnews import HotNewsScraper
+from connectors.onrc.onrc import OnrcScraper
 from connectors.scraper import BaseScraper, ScraperInfo
 from connectors.seap.seap import ElicitatieScraper
 
 _SCRAPERS: tuple[type[BaseScraper], ...] = (
     AnafScraper,
+    OnrcScraper,
     PortalJustScraper,
     AniScraper,
     ElicitatieScraper,

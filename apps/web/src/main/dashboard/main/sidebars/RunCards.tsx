@@ -1,10 +1,55 @@
 import { useEffect } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { X } from "lucide-react";
 import { cn } from "../../utils/util";
 import { isLive, useInvestigation } from "../../providers/investigation/store";
 import { runProgress } from "../../providers/investigation/progress";
 import { openInvestigationWindow } from "../investigation/open";
 import { ProgressBar } from "../investigation/ui";
+
+function FurtherSearches({ parentKey }: { parentKey: string }) {
+    const children = useInvestigation(
+        useShallow((s) =>
+            Object.values(s.runs).filter((run) => run.parentKey === parentKey),
+        ),
+    );
+    if (children.length === 0) return null;
+
+    return (
+        <div className="mt-3 flex flex-col gap-2 border-t border-white/10 pt-2">
+            {children.map((child) => {
+                const { percent, text } = runProgress(child);
+                return (
+                    <div key={child.key} title={child.reason ?? text}>
+                        <div className="flex items-baseline justify-between gap-2 text-xs">
+                            <span className="min-w-0 truncate text-neutral-300">
+                                ↳ {child.query}
+                                {child.origin === "auto" && (
+                                    <span className="ml-1.5 text-[10px] uppercase tracking-[1px] text-neutral-500">
+                                        auto
+                                    </span>
+                                )}
+                            </span>
+                            <span
+                                className={cn(
+                                    "shrink-0 tabular-nums",
+                                    child.phase === "failed"
+                                        ? "text-[#f16035]"
+                                        : "text-neutral-500",
+                                )}
+                            >
+                                {child.phase === "failed"
+                                    ? "failed"
+                                    : `${percent}%`}
+                            </span>
+                        </div>
+                        <ProgressBar run={child} className="mt-1" compact />
+                    </div>
+                );
+            })}
+        </div>
+    );
+}
 
 function RunCard({ runKey }: { runKey: string }) {
     const run = useInvestigation((s) => s.runs[runKey]);
@@ -65,6 +110,7 @@ function RunCard({ runKey }: { runKey: string }) {
                 {text}
             </div>
             <ProgressBar run={run} className="mt-3" />
+            <FurtherSearches parentKey={runKey} />
         </div>
     );
 }
@@ -72,7 +118,7 @@ function RunCard({ runKey }: { runKey: string }) {
 export default function RunCards() {
     const order = useInvestigation((s) => s.order);
     const busy = useInvestigation((s) =>
-        s.order.some((key) => isLive(s.runs[key].phase)),
+        Object.values(s.runs).some((run) => isLive(run.phase)),
     );
 
     useEffect(() => void useInvestigation.getState().restore(), []);

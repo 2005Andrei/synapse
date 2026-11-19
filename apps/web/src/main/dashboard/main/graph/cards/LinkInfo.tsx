@@ -8,6 +8,8 @@ type Props = {
     confidence?: number;
     status?: string;
     text?: string;
+    /** The passage of the source the claim was read from, word for word. */
+    quote?: string;
     sources?: { title: string; url: string }[];
 };
 
@@ -19,10 +21,11 @@ export default function LinkInfo({
     confidence,
     status,
     text,
+    quote,
     sources = [],
 }: Props) {
     return (
-        <div className="w-80 p-5 text-[#ececec] font-mono text-[12px]">
+        <div className="w-80 max-h-[80vh] overflow-y-auto [scrollbar-color:#444_transparent] [scrollbar-width:thin] p-5 text-left font-mono text-[12px] text-[#ececec]">
             <div className="mb-[15px] border-b border-[#333] pb-[15px]">
                 <div className="break-words text-white">{sourceLabel}</div>
                 <div
@@ -36,6 +39,15 @@ export default function LinkInfo({
 
             {text && (
                 <div className="mb-[15px] break-words text-[#aaa]">{text}</div>
+            )}
+
+            {quote && (
+                <blockquote className="mb-[15px] border-l-2 border-[#555] pl-3 text-[#aaa]">
+                    <div className="mb-1 text-[10px] uppercase tracking-[1px] text-[#888]">
+                        Read by AI from
+                    </div>
+                    <span className="break-words italic">“{quote}”</span>
+                </blockquote>
             )}
 
             <div className="mb-[15px] text-[#888]">

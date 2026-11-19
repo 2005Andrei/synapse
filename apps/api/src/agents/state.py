@@ -32,6 +32,11 @@ class InvestigationState(TypedDict, total=False):
     # What name-only sources are asked for. Differs from `query` when the
     # query is a CUI: then it is the company's name (see nodes/plan.py).
     name_query: str
+    # What CUI-capable registries are asked for, when it is not `query`: the
+    # fiscal code of a company that is being searched further by name.
+    registry_query: str
+    # Set when the run searches an existing entity further: that entity.
+    seed: Record | None
 
     # The entity the investigation is about. Starts as a placeholder built from
     # the query; resolution swaps it for the real record once one is found.
@@ -43,6 +48,10 @@ class InvestigationState(TypedDict, total=False):
     sources: Annotated[Records, merge_records]
 
     scrape_reports: list[Record]
+
+    # Sources the model has read (see agents/extraction.py), so another round
+    # of the agent loop does not pay to read them again.
+    sources_read: list[str]
 
     # Follow-up searches worth running next (see agents/leads.py).
     leads: list[Record]
@@ -61,3 +70,7 @@ class PipelineContext:
 
     emit: Emit  # publish a run event to the frontend
     settings: Settings
+    # The chat model of this run and what to tell the user about it. Left
+    # unset, the stages use the server's default model (agents/llm.py).
+    model: Any = None
+    llm: dict[str, Any] | None = None

@@ -52,8 +52,13 @@ export function divide(run: RunState): Division {
         }
     };
 
+    // A flag is relative to the search it was made for; the graph may also
+    // hold the results of searches that went further from one of its nodes.
     const flagged = Object.values(run.entities).filter(
-        (e) => e.attributes.match,
+        (e) =>
+            e.attributes.match &&
+            (e.attributes.match_of === undefined ||
+                e.attributes.match_of === run.seedId),
     );
     // A similar name stays its own identity unless the user said it is the
     // same person (`run.joined`); only then do its records count as the subject's.

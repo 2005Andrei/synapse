@@ -8,6 +8,15 @@ class BaseAttributes(BaseModel):
     model_config = ConfigDict(extra="allow")
 
 
+class FinancialYear(BaseModel):
+    """One filed annual statement. Amounts are in the company's `currency`."""
+
+    year: int
+    revenue: float | None = None
+    net_result: float | None = None  # profit > 0, loss < 0
+    employees: float | None = None
+
+
 class CompanyAttributes(BaseAttributes):
     organization_type: OrganizationType = OrganizationType.COMPANY
     legal_form: str | None = None
@@ -19,6 +28,8 @@ class CompanyAttributes(BaseAttributes):
     industry: list[str] = Field(default_factory=list)
     revenue: float | None = None
     currency: str | None = None
+    # Yearly statements, oldest first (see connectors/anaf).
+    financials: list[FinancialYear] = Field(default_factory=list)
 
 
 class PersonAttributes(BaseAttributes):

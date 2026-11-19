@@ -6,3 +6,6 @@ __pycache__/
 *.pyc
 .venv/
 .pytest_cache/
+
+# Built locally with `just onrc-import` (about 1 GB).
+apps/api/data/

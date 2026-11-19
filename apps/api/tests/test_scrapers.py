@@ -6,7 +6,7 @@ from models.types import EntityType, SourceType
 
 
 def test_every_registered_scraper_declares_its_identity() -> None:
-    assert len(SCRAPERS) == 11
+    assert len(SCRAPERS) == 12
     for name, cls in SCRAPERS.items():
         assert issubclass(cls, BaseScraper)
         assert cls.name == name and name.isidentifier()

@@ -33,7 +33,7 @@ async def resolve(
     ]
     claims.update(_link_articles(survivors, seed_id, state["query"]))
 
-    flagged, name_claims = _flag_name_matches(survivors, seed_id, name)
+    flagged, name_claims = flag_name_matches(survivors, seed_id, name)
     resolution.entities.update(flagged)
     claims.update(name_claims)
 
@@ -87,7 +87,7 @@ _NAMED = {EntityType.PERSON.value, EntityType.ORGANIZATION.value}
 SAME_NAME, SIMILAR_NAME = "Same_Name", "Similar_Name"
 
 
-def _flag_name_matches(
+def flag_name_matches(
     entities: list[Record], seed_id: str, name: str
 ) -> tuple[dict[str, Record], dict[str, Record]]:
     """Label every person / company by how its name compares with the search
@@ -110,7 +110,10 @@ def _flag_name_matches(
         if match is None:
             continue
 
-        attributes = {**(entity.get("attributes") or {}), "match": match.kind}
+        # `match_of`: a flag only means something relative to the search it
+        # was made for (graphs can hold the results of several searches).
+        attributes = {**(entity.get("attributes") or {}), "match": match.kind, "match_of": seed_id}
+        attributes.pop("match_note", None)
         if match.note:
             attributes["match_note"] = match.note
         flagged[entity["id"]] = {**entity, "attributes": attributes}

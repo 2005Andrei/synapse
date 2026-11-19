@@ -10,6 +10,9 @@ import {
 } from "../../../providers/investigation/identities";
 import { Empty, TypeBadge, entityName } from "../ui";
 
+/** `origin` of graph patches made by the model (apps/api: agents/extraction.py). */
+const AI_ORIGIN = "discover";
+
 type Row = {
     id: string;
     type: string;
@@ -53,12 +56,19 @@ function rowsOf(run: RunState, scraper: string, { groupOf }: Division): Row[] {
         });
     }
     for (const claim of Object.values(run.claims)) {
-        if (!from(claim.id) || claim.reference_ids.length > 0) continue;
+        const relation = claim.reference_ids.length > 0;
+        if (!from(claim.id) || (relation && scraper !== AI_ORIGIN)) continue;
         rows.push({
             id: claim.id,
-            type: "Fact",
+            type: relation ? "Relation" : "Fact",
             label: claim.claim_text,
-            summary: claim.predicate.replace(/_/g, " "),
+            summary: [
+                claim.predicate.replace(/_/g, " "),
+                scraper === AI_ORIGIN && claim.claim_status,
+                claim.quote && `“${claim.quote}”`,
+            ]
+                .filter(Boolean)
+                .join(" · "),
             group: groupOf[claim.subject_ids[0]] ?? OTHER,
             url: run.sources[claim.source_ids[0]]?.url ?? null,
         });
@@ -72,11 +82,20 @@ export default function DataBySource({ run }: { run: RunState }) {
         const names = run.scraperNames.length
             ? run.scraperNames
             : Object.keys(run.scrapers);
-        return names.map((name) => ({
+        const listed = names.map((name) => ({
             name,
             report: run.scrapers[name],
             rows: rowsOf(run, name, division),
         }));
+        // Not a scraper: what the model read out of the articles (discover stage).
+        const read = rowsOf(run, AI_ORIGIN, division);
+        if (read.length > 0)
+            listed.push({
+                name: AI_ORIGIN,
+                report: { scraper: AI_ORIGIN, label: "AI reading", status: "ok" },
+                rows: read,
+            });
+        return listed;
     }, [run, division]);
 
     const [picked, setPicked] = useState<string | null>(null);

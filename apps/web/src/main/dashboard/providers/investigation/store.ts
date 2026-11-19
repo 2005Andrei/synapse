@@ -13,6 +13,8 @@ import type {
     RunEvent,
     ScraperReport,
     Source,
+    LlmStatus,
+    Run,
 } from "./types";
 
 export type Phase = "starting" | "queued" | "running" | "completed" | "failed";
@@ -51,16 +53,30 @@ export type RunState = {
     focus: string | null;
     /** Similar-name entities the user confirmed are the subject itself. */
     joined: string[];
+    /** The chat model the worker ran this search with; null until it starts. */
+    llm: LlmStatus | null;
+
+    /** "Search further": this run extends the graph of the run `parentKey`,
+     *  starting from that graph's entity `entityId`. */
+    parentKey: string | null;
+    entityId: string | null;
+    origin: "user" | "auto";
+    reason: string | null;
+    /** Entity ids this graph merged away -> the entity that replaced them. */
+    redirects: Record<string, string>;
 };
 
 type State = {
     runs: Record<string, RunState>;
-    /** Run keys, newest first. */
+    /** Keys of the searches the user started, newest first. Runs that search
+     *  one of their entities further are found through `parentKey`. */
     order: string[];
     /** The run the graph and the investigation window are showing. */
     activeKey: string | null;
 
     start: (query: string) => string;
+    /** Search an entity of a run's graph further; results join that graph. */
+    expand: (key: string, entity: Entity) => string | null;
     /** Bring back the recent searches after a page (re)load. */
     restore: () => Promise<void>;
     select: (key: string) => void;
@@ -89,6 +105,12 @@ const newRun = (key: string, query: string): RunState => ({
     origins: {},
     focus: null,
     joined: [],
+    llm: null,
+    parentKey: null,
+    entityId: null,
+    origin: "user",
+    reason: null,
+    redirects: {},
 });
 
 // "same person" decisions are the user's own judgement, not pipeline output: - at the moment at least, AI pipeline should fix that
@@ -134,12 +156,45 @@ export const useInvestigation = create<State>((set, get) => {
                 : s;
         });
 
+    /** Start showing a run that extends another one's graph. */
+    const adopt = (run: Run): string | null => {
+        const { runs } = get();
+        const known = Object.values(runs).find((r) => r.runId === run.id);
+        if (known) return known.key;
+        const parent = Object.values(runs).find((r) => r.runId === run.parent_id);
+        if (!parent) return null;
+
+        const key = `run-${++counter}`;
+        const child: RunState = {
+            ...newRun(key, run.query),
+            runId: run.id,
+            phase: run.status,
+            error: run.error,
+            scraperNames: run.scrapers,
+            startedAt: Date.parse(run.created_at) || Date.now(),
+            parentKey: parent.key,
+            entityId: run.seed?.id ?? null,
+            origin: run.origin,
+            reason: run.reason,
+        };
+        set((s) => ({ runs: { ...s.runs, [key]: child } }));
+        follow(key, run.id);
+        return key;
+    };
+
     const follow = (key: string, runId: string) =>
         connections.set(
             key,
             followInvestigation(
                 runId,
-                (event) => patch(key, (r) => reduce(r, event)),
+                (event) => {
+                    if (event.type === "run.spawned") adopt(event.data.run);
+                    patch(key, (r) => reduce(r, event));
+                    // What a further search finds belongs to the graph it started from.
+                    const parentKey = get().runs[key]?.parentKey;
+                    if (parentKey && event.type === "graph.patch")
+                        patch(parentKey, (parent) => absorb(parent, event.data));
+                },
                 () =>
                     patch(key, (r) =>
                         isLive(r.phase)
@@ -164,15 +219,22 @@ export const useInvestigation = create<State>((set, get) => {
             const recent = await listInvestigations().catch(() => []);
             if (recent.length === 0) return;
 
-            const found = recent.map((run) => ({
-                ...newRun(`run-${++counter}`, run.query),
-                runId: run.id,
-                phase: run.status,
-                error: run.error,
-                scraperNames: run.scrapers,
-                joined: loadJoined(run.id),
-                startedAt: Date.parse(run.created_at) || Date.now(),
-            }));
+            // A further search whose parent is gone stands on its own.
+            const ids = new Set(recent.map((run) => run.id));
+            const further = recent.filter(
+                (run) => run.parent_id && ids.has(run.parent_id),
+            );
+            const found = recent
+                .filter((run) => !further.includes(run))
+                .map((run) => ({
+                    ...newRun(`run-${++counter}`, run.query),
+                    runId: run.id,
+                    phase: run.status,
+                    error: run.error,
+                    scraperNames: run.scrapers,
+                    joined: loadJoined(run.id),
+                    startedAt: Date.parse(run.created_at) || Date.now(),
+                }));
             set((s) => ({
                 runs: {
                     ...s.runs,
@@ -182,6 +244,53 @@ export const useInvestigation = create<State>((set, get) => {
                 activeKey: s.activeKey ?? found[0].key,
             }));
             for (const run of found) follow(run.key, run.runId);
+            // Oldest first, so cards keep the order the searches were made in.
+            for (const run of further.reverse()) adopt(run);
+        },
+
+        expand: (key, entity) => {
+            const parent = get().runs[key];
+            const name = entity.aliases?.[0];
+            if (!parent?.runId || !name) return null;
+            const again = Object.values(get().runs).find(
+                (r) =>
+                    r.parentKey === key &&
+                    r.entityId === entity.id &&
+                    r.phase !== "failed",
+            );
+            if (again) return again.key; // already searched, or being searched
+
+            const childKey = `run-${++counter}`;
+            set((s) => ({
+                runs: {
+                    ...s.runs,
+                    [childKey]: {
+                        ...newRun(childKey, name),
+                        parentKey: key,
+                        entityId: entity.id,
+                    },
+                },
+            }));
+            createInvestigation(name, { parentId: parent.runId, seed: entity })
+                .then((run) => {
+                    if (!get().runs[childKey]) return;
+                    patch(childKey, () => ({
+                        runId: run.id,
+                        phase: "queued",
+                        scraperNames: run.scrapers,
+                    }));
+                    follow(childKey, run.id);
+                })
+                .catch((error: unknown) =>
+                    patch(childKey, () => ({
+                        phase: "failed",
+                        error:
+                            error instanceof TypeError
+                                ? "API is not reachable"
+                                : (error as Error).message,
+                    })),
+                );
+            return childKey;
         },
 
         start: (query) => {
@@ -233,13 +342,21 @@ export const useInvestigation = create<State>((set, get) => {
             }),
 
         dismiss: (key) => {
-            connections.get(key)?.();
-            connections.delete(key);
-            const runId = get().runs[key]?.runId;
-            if (runId) forgetInvestigation(runId);
+            const gone = [
+                key,
+                ...Object.values(get().runs)
+                    .filter((r) => r.parentKey === key)
+                    .map((r) => r.key),
+            ];
+            for (const each of gone) {
+                connections.get(each)?.();
+                connections.delete(each);
+                const runId = get().runs[each]?.runId;
+                if (runId) forgetInvestigation(runId);
+            }
             set((s) => {
                 const runs = { ...s.runs };
-                delete runs[key];
+                for (const each of gone) delete runs[each];
                 const order = s.order.filter((k) => k !== key);
                 return {
                     runs,
@@ -271,6 +388,7 @@ function reduce(run: RunState, event: RunEvent): Partial<RunState> {
             return {
                 phase: "running",
                 scraperNames: event.data.scrapers ?? run.scraperNames,
+                llm: event.data.llm ?? run.llm,
             };
 
         case "run.completed":
@@ -343,7 +461,8 @@ function applyPatch(run: RunState, patch: GraphPatch): Partial<RunState> {
     };
 
     for (const id of patch.removed_entity_ids ?? []) delete entities[id];
-    for (const entity of patch.entities) entities[entity.id] = entity;
+    for (const entity of patch.entities)
+        entities[entity.id] = mergeEntity(entities[entity.id], entity);
     for (const claim of patch.claims) claims[claim.id] = claim;
     for (const source of patch.sources) sources[source.id] = source;
 
@@ -361,5 +480,48 @@ function applyPatch(run: RunState, patch: GraphPatch): Partial<RunState> {
         sources,
         origins,
         seedId: patch.seed_id ?? run.seedId,
+        redirects: patch.merged
+            ? { ...run.redirects, ...patch.merged }
+            : run.redirects,
     };
+}
+
+/** Two registries describe one company under one id: keep what both know. */
+function mergeEntity(known: Entity | undefined, incoming: Entity): Entity {
+    if (!known) return incoming;
+    return {
+        ...incoming,
+        description: incoming.description || known.description,
+        aliases: [...new Set([...(known.aliases ?? []), ...(incoming.aliases ?? [])])],
+        attributes: { ...known.attributes, ...incoming.attributes },
+    };
+}
+
+/**
+ * Take a patch from a run that searches one of this graph's entities further.
+ * This graph may already have merged a record the other run reports again
+ * (same scraper, same name, same id), so ids go through `redirects` first.
+ * The subject of the graph stays what it was.
+ */
+function absorb(run: RunState, patch: GraphPatch): Partial<RunState> {
+    const now = (id: string) => {
+        for (let hops = 0; run.redirects[id] && hops < 8; hops++)
+            id = run.redirects[id];
+        return id;
+    };
+    const ids = (list: string[]) => [...new Set(list.map(now))];
+    return applyPatch(run, {
+        ...patch,
+        seed_id: undefined,
+        entities: patch.entities.map((entity) => ({ ...entity, id: now(entity.id) })),
+        claims: patch.claims.map((claim) => ({
+            ...claim,
+            subject_ids: ids(claim.subject_ids),
+            reference_ids: ids(claim.reference_ids),
+        })),
+        // Never drop a node this graph merged other records into.
+        removed_entity_ids: (patch.removed_entity_ids ?? []).filter(
+            (id) => now(id) === id && !Object.values(run.redirects).includes(id),
+        ),
+    });
 }

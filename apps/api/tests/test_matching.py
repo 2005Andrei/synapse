@@ -65,7 +65,9 @@ async def test_similar_names_stay_separate_and_are_linked_as_hypotheses(
     subject = entities[final["seed_id"]]
     assert subject is people["POPESCU ION"] and subject["attributes"]["match"] == "exact"
     # ...the others are flagged, with what differs.
-    assert people["POPESCU ION MARIAN"]["attributes"] == {"match": "similar", "match_note": "extra: MARIAN"}
+    assert people["POPESCU ION MARIAN"]["attributes"] == {
+        "match": "similar", "match_note": "extra: MARIAN", "match_of": final["seed_id"]
+    }
     assert people["Popescu Ioan"]["attributes"]["match_note"] == "spelling: ion ≈ ioan"
 
     links = [c for c in claims.values() if c["predicate"] == "Similar_Name"]

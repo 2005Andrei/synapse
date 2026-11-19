@@ -26,3 +26,8 @@ web:
 
 test:
     cd apps/api && uv run pytest
+
+# Build the local trade-register index from data.gov.ro (company search, administrators).
+# Pass CUIs to build a small sample instead:  just onrc-import 2816464,14399840
+onrc-import only="":
+    cd apps/api && uv run python -m connectors.onrc.build {{ if only == "" { "" } else { "--only " + only } }}

@@ -1,11 +1,13 @@
 import { SidebarLinks } from "./utils/SidebarLinks";
 import RunCards from "./RunCards";
+import ModelSettings from "./ModelSettings";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { X } from "lucide-react";
 import { cn } from "cn";
 
 export default function Sidebar() {
+    const [showSettings, setShowSettings] = useState(false);
     const links = [
         {
             title: "Projects",
@@ -61,7 +63,7 @@ export default function Sidebar() {
         },
         {
             title: "Settings",
-            onClick: () => console.log("Toggled settings modal"),
+            onClick: () => setShowSettings((shown) => !shown),
         },
     ];
 
@@ -99,6 +101,7 @@ export default function Sidebar() {
             </div>
             <div className="shrink-0">
                 <SidebarLinks data={links} />
+                {showSettings && <ModelSettings />}
             </div>
             <RunCards />
         </div>

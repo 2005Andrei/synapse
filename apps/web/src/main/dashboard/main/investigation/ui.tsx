@@ -51,9 +51,12 @@ export function Empty({ children }: { children: ReactNode }) {
 export function ProgressBar({
     run,
     className,
+    compact = false,
 }: {
     run: RunState;
     className?: string;
+    /** Bar only: the caller shows the percentage itself. */
+    compact?: boolean;
 }) {
     const { percent } = runProgress(run);
     return (
@@ -73,9 +76,11 @@ export function ProgressBar({
                     style={{ width: `${percent}%` }}
                 />
             </div>
-            <span className="w-8 shrink-0 text-right text-[10px] tabular-nums text-[#aaa]">
-                {percent}%
-            </span>
+            {!compact && (
+                <span className="w-8 shrink-0 text-right text-[10px] tabular-nums text-[#aaa]">
+                    {percent}%
+                </span>
+            )}
         </div>
     );
 }
@@ -83,7 +88,9 @@ export function ProgressBar({
 export function TypeBadge({ type }: { type: string }) {
     const color =
         (ENTITY_COLORS as Record<string, string>)[type] ??
-        (type === "Fact" ? "#9aa0a6" : ENTITY_COLORS.Default);
+        (type === "Fact" || type === "Relation"
+            ? "#9aa0a6"
+            : ENTITY_COLORS.Default);
     return (
         <span
             className="inline-block whitespace-nowrap rounded-full border px-2 py-px text-[10px]"

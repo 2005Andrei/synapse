@@ -21,6 +21,13 @@ dependencies = [
     "uvicorn[standard]>=0.54.0",
 ]
 
+# The chat model is optional and provider-neutral (see src/agents/llm.py):
+# install the extra that matches LLM_MODEL, e.g. `uv sync --extra anthropic`.
+[project.optional-dependencies]
+anthropic = ["langchain-anthropic"]
+openai = ["langchain-openai"]
+ollama = ["langchain-ollama"]
+
 [project.scripts]
 api = "api:main"
 

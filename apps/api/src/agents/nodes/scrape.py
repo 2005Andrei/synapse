@@ -4,6 +4,7 @@ from typing import Any
 
 from langgraph.runtime import Runtime
 
+from agents.resolution import merge_entity
 from agents.stages import graph_patch, stage
 from agents.state import InvestigationState, PipelineContext, Record
 from connectors.registry import get_scraper
@@ -34,7 +35,7 @@ async def scrape(
             await ctx.emit(
                 EventType.SCRAPER_STARTED, {"scraper": name, "label": scraper.label}
             )
-            asked = query if scraper.accepts_cui else name_query
+            asked = (state.get("registry_query") or query) if scraper.accepts_cui else name_query
             result = await _search(scraper, asked, ctx.settings.scraper_timeout_seconds)
             dumped = result.model_dump(mode="json")
 
@@ -72,7 +73,10 @@ async def scrape(
     for result in results:
         dumped = result.model_dump(mode="json")
         for kind, records in update.items():
-            records.update({record["id"]: record for record in dumped[kind]})
+            for record in dumped[kind]:
+                known = records.get(record["id"])
+                # Two registries describe one company under one id: keep what both know.
+                records[record["id"]] = merge_entity(known, record) if known and kind == "entities" else record
         reports.append(
             {
                 "scraper": result.scraper,

@@ -73,6 +73,20 @@ export default function Overview({ run }: { run: RunState }) {
                 {Object.keys(run.claims).length} claims ·{" "}
                 {Object.keys(run.sources).length} sources
             </div>
+            {run.llm && (
+                <div className="text-[#aaa]" title={run.llm.problem ?? undefined}>
+                    AI:{" "}
+                    {run.llm.ready ? (
+                        <span className="text-white">{run.llm.model}</span>
+                    ) : run.llm.model ? (
+                        <span className="text-[#f16035]">
+                            {run.llm.model} could not be loaded; running without it
+                        </span>
+                    ) : (
+                        "off (rule-based; set LLM_MODEL on the worker to read articles)"
+                    )}
+                </div>
+            )}
             {similar.length > 0 && (
                 <div className="rounded border border-[#ffd166]/40 bg-[#ffd166]/5 px-3 py-2 text-[#ffd166]">
                     {similar.length} similar name{similar.length > 1 ? "s" : ""}{" "}

@@ -1,5 +1,6 @@
 import { CopyLink } from "../../../utils/CopyLink";
 import { isUrl } from "../../../utils/util";
+import Financials, { parseFinancials } from "./Financials";
 
 type Props = {
     label: string;
@@ -9,7 +10,16 @@ type Props = {
     attributes?: Record<string, unknown>;
 };
 
-const HIDDEN = new Set(["source_id"]);
+const HIDDEN = new Set(["source_id", "financials"]);
+// Shown by the charts (latest year), so not repeated as rows below them.
+const CHARTED = new Set(["revenue", "employees", "financial_year", "currency"]);
+
+function display(value: unknown): string {
+    if (Array.isArray(value)) return value.map(display).join(", ");
+    if (typeof value === "boolean") return value ? "yes" : "no";
+    if (value !== null && typeof value === "object") return JSON.stringify(value);
+    return String(value);
+}
 
 export default function NodeInfo({
     label,
@@ -19,12 +29,18 @@ export default function NodeInfo({
     attributes = {},
 }: Props) {
     const url = isUrl(attributes.url) ? attributes.url : null;
+    const financials = parseFinancials(attributes.financials);
     const rest = Object.entries(attributes).filter(
-        ([key]) => key !== "url" && !HIDDEN.has(key),
+        ([key, value]) =>
+            key !== "url" &&
+            !HIDDEN.has(key) &&
+            !(financials.length > 0 && CHARTED.has(key)) &&
+            value !== null &&
+            value !== "",
     );
 
     return (
-        <div className="w-80 p-5 text-[#ececec] font-mono">
+        <div className="w-80 max-h-[80vh] overflow-y-auto [scrollbar-color:#444_transparent] [scrollbar-width:thin] p-5 font-mono text-[#ececec]">
             <div className="mb-[15px] text-center">
                 <h3 className="m-0 break-words" style={{ color }}>
                     {label}
@@ -45,13 +61,23 @@ export default function NodeInfo({
                 )}
             </div>
 
-            <div className="text-[12px]">
+            <div className="text-left text-[12px]">
                 <div
                     className="mb-2 uppercase tracking-[1px]"
                     style={{ color }}
                 >
                     Attributes
                 </div>
+                {financials.length > 0 && (
+                    <Financials
+                        years={financials}
+                        currency={
+                            typeof attributes.currency === "string"
+                                ? attributes.currency
+                                : undefined
+                        }
+                    />
+                )}
                 {rest.map(([key, value]) => (
                     <div key={key} className="mb-[6px] flex flex-col">
                         <span className="text-[#888]">
@@ -61,9 +87,7 @@ export default function NodeInfo({
                             <CopyLink url={value} />
                         ) : (
                             <span className="break-words text-white">
-                                {Array.isArray(value)
-                                    ? value.join(", ")
-                                    : String(value)}
+                                {display(value)}
                             </span>
                         )}
                     </div>

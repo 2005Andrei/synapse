@@ -1,24 +1,28 @@
 import { useShallow } from "zustand/react/shallow";
 import {
+    isLive,
     useInvestigation,
     type RunState,
 } from "../../../providers/investigation/store";
+import { runProgress } from "../../../providers/investigation/progress";
 import { Empty, Section, TypeBadge } from "../ui";
 
 export default function Leads({ run }: { run: RunState }) {
-    const queries = useInvestigation(
+    // Searches that already went further from an entity of this graph.
+    const further = useInvestigation(
         useShallow((s) =>
-            s.order.map((key) => s.runs[key].query.toLowerCase()),
+            Object.values(s.runs).filter((r) => r.parentKey === run.key),
         ),
     );
-    const start = useInvestigation((s) => s.start);
+    const expand = useInvestigation((s) => s.expand);
 
     return (
         <div className="flex flex-col gap-3">
             <div className="text-[#aaa]">
-                People and companies that came up in this search and may deserve
-                one of their own. Submitting a lead starts a new search on a
-                separate worker.
+                People and companies worth a search of their own. The people who
+                run a searched company come first, and the most senior of them
+                is searched automatically. Results join this graph; you can
+                also right-click any person or company in the graph.
             </div>
 
             {run.leads.length === 0 ? (
@@ -29,9 +33,11 @@ export default function Leads({ run }: { run: RunState }) {
                 </Empty>
             ) : (
                 run.leads.map((lead) => {
-                    const submitted = queries.includes(
-                        lead.query.toLowerCase(),
+                    const entity = run.entities[lead.entity_id];
+                    const child = further.find(
+                        (r) => r.entityId === lead.entity_id && r.phase !== "failed",
                     );
+                    const waiting = lead.follow && !child && isLive(run.phase);
                     return (
                         <div
                             key={lead.entity_id}
@@ -43,6 +49,11 @@ export default function Leads({ run }: { run: RunState }) {
                                         {lead.query}
                                     </span>
                                     <TypeBadge type={lead.entity_type} />
+                                    {lead.role && (
+                                        <span className="text-[10px] uppercase tracking-[1px] text-[#69ff94]">
+                                            {lead.role}
+                                        </span>
+                                    )}
                                 </div>
                                 <div className="mt-0.5 text-[#888]">
                                     {lead.reason}
@@ -50,11 +61,19 @@ export default function Leads({ run }: { run: RunState }) {
                             </div>
                             <button
                                 type="button"
-                                disabled={submitted}
-                                onClick={() => start(lead.query)}
+                                disabled={Boolean(child) || waiting || !entity}
+                                onClick={() => entity && expand(run.key, entity)}
                                 className="no-drag shrink-0 cursor-pointer rounded border border-[#ffd166]/60 px-2 py-1 text-[#ffd166] hover:bg-[#ffd166]/10 disabled:cursor-default disabled:border-[#444] disabled:text-[#666] disabled:hover:bg-transparent"
                             >
-                                {submitted ? "Submitted" : "Investigate"}
+                                {child
+                                    ? isLive(child.phase)
+                                        ? `Searching ${runProgress(child).percent}%`
+                                        : child.origin === "auto"
+                                          ? "Searched (auto)"
+                                          : "Searched"
+                                    : waiting
+                                      ? "Queued (auto)"
+                                      : "Search further"}
                             </button>
                         </div>
                     );

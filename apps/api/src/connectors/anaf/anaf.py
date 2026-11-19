@@ -175,6 +175,16 @@ class AnafScraper(BaseScraper):
             currency="RON" if latest.get(REVENUE) is not None else None,
             employees=latest.get(EMPLOYEES),
             financial_year=latest.get("year"),
+            # The whole series, oldest first: the company window charts it.
+            financials=[
+                {
+                    "year": year["year"],
+                    "revenue": year.get(REVENUE),
+                    "net_result": _net_result(year),
+                    "employees": year.get(EMPLOYEES),
+                }
+                for year in years
+            ],
         )
 
         for admin in company.get("administrators") or []:
@@ -206,7 +216,7 @@ class AnafScraper(BaseScraper):
             )
             for year in years:
                 revenue = year.get(REVENUE) or 0
-                net = year.get(NET_PROFIT) or -(year.get(NET_LOSS) or 0)
+                net = _net_result(year) or 0
                 employees = year.get(EMPLOYEES) or 0
                 out.claim(
                     org,
@@ -216,6 +226,15 @@ class AnafScraper(BaseScraper):
                     sources=[statements],
                     key=year["year"],
                 )
+
+
+def _net_result(year: dict) -> float | None:
+    """Profit as a positive number, loss as a negative one; None if neither was filed."""
+    if year.get(NET_PROFIT):
+        return year[NET_PROFIT]
+    if year.get(NET_LOSS):
+        return -year[NET_LOSS]
+    return 0 if NET_PROFIT in year or NET_LOSS in year else None
 
 
 def _indicators(sheet: dict) -> dict[str, float]:

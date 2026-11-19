@@ -60,6 +60,9 @@ class Claim(BaseModel):
     reference_ids: list[UUID] = Field(default_factory=list)
 
     source_ids: list[UUID] = Field(default_factory=list)
+    # The passage of the source that supports the claim, word for word. Set on
+    # claims a model read out of a text, so a person can check them at a glance.
+    quote: str | None = None
     claim_status: ClaimStatus = ClaimStatus.UNVERIFIED
     confidence: float | None = Field(default=None, ge=0, le=1)
 

@@ -30,6 +30,9 @@ def name_key(name: str, entity_type: str) -> str:
     words = re.split(r"[^a-z0-9-]+", fold(name).replace(".", ""))
     if entity_type == EntityType.ORGANIZATION.value:
         words = [word for word in words if word not in LEGAL_FORMS]
+    elif entity_type == EntityType.PERSON.value:
+        # Registries add the father's initial ("PAVĂL I. DRAGOŞ"); nobody else does.
+        words = [word for word in words if len(word) > 1]
     return " ".join(sorted(word for word in words if word))
 
 
@@ -60,7 +63,7 @@ def resolve_entities(
         return entity_id
 
     def merge(survivor: Record, other: Record) -> Record:
-        merged = _merge(survivor, other)
+        merged = merge_entity(survivor, other)
         result.merged[other["id"]] = merged["id"]
         result.entities.pop(other["id"], None)
         result.entities[merged["id"]] = merged
@@ -70,14 +73,20 @@ def resolve_entities(
         entity_id = current(entity_id)
         return result.entities.get(entity_id) or entities[entity_id]
 
-    # 1. Same kind + same name -> one entity.
+    def rank(entity: Record) -> tuple:
+        # An entity that is being searched further keeps its id (its node).
+        return (entity["id"] != seed_id, *_rank(entity))
+
+    # 1. Same kind + same name -> one entity, unless they are known to be
+    #    different people.
     for members in groups.values():
         ids = list(dict.fromkeys(current(member["id"]) for member in members))
         if len(ids) < 2:
             continue
-        survivor, *others = sorted((latest(i) for i in ids), key=_rank)
-        for other in others:
-            survivor = merge(survivor, other)
+        for bucket in _same_person_buckets([latest(i) for i in ids]):
+            survivor, *others = sorted(bucket, key=rank)
+            for other in others:
+                survivor = merge(survivor, other)
 
     # 2. The seed is a placeholder for "whatever the user searched". If a real
     #    record matches the query, that record becomes the seed.
@@ -115,13 +124,30 @@ def remap_claims(
     return changed
 
 
+def _same_person_buckets(entities: list[Record]) -> list[list[Record]]:
+    """Split same-named entities into the groups that may be merged.
+
+    A date of birth settles it: two birthdays are two people. Once a name is
+    known to belong to several people, a record without a birthday (a court
+    file, an article) could be any of them, so it is merged with none.
+    """
+    born: dict[str, list[Record]] = {}
+    undated: list[Record] = []
+    for entity in entities:
+        birthday = (entity.get("attributes") or {}).get("date_of_birth")
+        (born.setdefault(str(birthday), []) if birthday else undated).append(entity)
+    if len(born) <= 1:
+        return [entities]
+    return [*born.values(), *([undated] if undated else [])]
+
+
 def _rank(entity: Record) -> tuple:
     """Sort key: the entity that should survive a merge comes first."""
     attributes = entity.get("attributes") or {}
     return ("cui" not in attributes, -len(attributes), entity["id"])
 
 
-def _merge(survivor: Record, other: Record) -> Record:
+def merge_entity(survivor: Record, other: Record) -> Record:
     aliases = list(
         dict.fromkeys([*(survivor.get("aliases") or []), *(other.get("aliases") or [])])
     )

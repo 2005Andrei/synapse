@@ -85,6 +85,28 @@ class Broken(BaseScraper):
 FAKES = {cls.name: cls for cls in (FakeNews, FakeRegistry, FakeCourt, Broken)}
 
 
+@pytest.fixture(autouse=True)
+def no_real_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Tests never call a real (paid) model, whatever LLM_MODEL says locally.
+    A test that wants a model patches `get_chat_model` with a fake."""
+    from agents.nodes import discover
+
+    monkeypatch.setattr(discover, "get_chat_model", lambda: None)
+    monkeypatch.setattr(discover, "llm_status", lambda: {"model": None, "ready": False, "problem": None})
+    # ... nor a local one: a run that names its own model gets none either.
+    monkeypatch.setattr(
+        "workers.tasks.resolve_model",
+        lambda choice: (None, {"model": (choice or {}).get("model"), "ready": False, "problem": None}),
+    )
+
+
+@pytest.fixture(autouse=True)
+def no_local_register(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Tests do not depend on whether this machine has built the ONRC index."""
+    monkeypatch.setattr("connectors.onrc.index.get_index", lambda: None)
+    monkeypatch.setattr("connectors.onrc.onrc.get_index", lambda: None)
+
+
 @pytest.fixture
 def fake_scrapers(monkeypatch: pytest.MonkeyPatch) -> dict[str, type[BaseScraper]]:
     """Swap the real scraper registry for offline fakes."""

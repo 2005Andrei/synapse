@@ -11,26 +11,22 @@ Two ways to pick them, same output:
     excerpts and picks and explains. Used when LLM_MODEL is set.
 """
 
+import re
 from collections import Counter
 
 from langchain_core.language_models import BaseChatModel
 from pydantic import BaseModel, Field
 
+from agents.llm import ask
+from agents.prompts import LEADS_SYSTEM
 from agents.resolution import name_key
 from agents.state import InvestigationState, Record
-from models.types import ClaimType, EntityType
+from connectors.common.text import fold
+from models.types import ClaimType, EntityType, Predicate
 
 _LEAD_TYPES = {EntityType.PERSON.value, EntityType.ORGANIZATION.value}
 _MAX_CANDIDATES = 40
 _MAX_SOURCES = 15
-
-SYSTEM_PROMPT = """You help an investigative journalist decide what to look up next.
-You get the subject of an investigation, the people and companies found so far
-(with the claims that mention them) and excerpts of the sources. Pick the few
-that are most worth a search of their own in public registries, court records
-and the press. Prefer entities with a concrete, documented link to the subject.
-Only pick names from the candidate list, spelled exactly as given. Give one
-short, factual reason each; do not speculate about wrongdoing."""
 
 
 class LeadChoice(BaseModel):
@@ -74,7 +70,7 @@ def candidates(state: InvestigationState) -> list[tuple[Record, list[Record]]]:
     return found[:_MAX_CANDIDATES]
 
 
-def _lead(entity: Record, reason: str, score: int, by: str) -> Record:
+def _lead(entity: Record, reason: str, score: int, by: str, **extra: object) -> Record:
     return {
         "query": name_of(entity),
         "entity_id": entity["id"],
@@ -82,7 +78,76 @@ def _lead(entity: Record, reason: str, score: int, by: str) -> Record:
         "reason": reason,
         "score": score,
         "by": by,
+        **extra,
     }
+
+
+# Role named in a claim (folded) -> how much that person runs the company.
+# First match wins, so the specific titles come before the generic ones.
+_ROLES = (
+    ("director general", 100), ("ceo", 100), ("administrator unic", 95), ("presedinte", 95),
+    ("administrator special", 30), ("administrator judiciar", 20),
+    ("administrator", 90), ("director", 80), ("fondator", 70), ("actionar", 70), ("asociat", 70),
+    ("membru", 60), ("reprezentant legal", 50), ("imputernicit", 40),
+    ("lichidator", 10), ("avocat", 5),
+)  # fmt: skip
+_BY_PREDICATE = {
+    Predicate.DIRECTOR_OF.value: ("director", 85),
+    Predicate.CONTROLS.value: ("controls it", 75),
+    Predicate.OWNS.value: ("owner", 70),
+    Predicate.SHAREHOLDER_IN.value: ("shareholder", 70),
+    Predicate.FOUNDED.value: ("founder", 70),
+    Predicate.REPRESENTS.value: ("representative", 30),
+}
+# From this weight up, someone is close enough to the top to be searched without asking.
+FOLLOW_FROM = 80
+
+
+def officers(state: InvestigationState) -> list[Record]:
+    """The people tied to the searched company by a role in it, most senior
+    first, as leads. Empty when the search is not about a company."""
+    entities = state.get("entities", {})
+    seed = entities.get(state.get("seed_id", ""))
+    if not seed or seed["type"] != EntityType.ORGANIZATION.value:
+        return []
+
+    best: dict[str, tuple[int, str, Record]] = {}  # person id -> (weight, role, claim)
+    for claim in state.get("claims", {}).values():
+        predicate = str(claim["predicate"])
+        if predicate not in _BY_PREDICATE or seed["id"] not in claim.get("reference_ids", []):
+            continue
+        text = fold(claim.get("claim_text"))
+        role, weight = next(
+            ((title, weight) for title, weight in _ROLES if re.search(rf"\b{title}\b", text)),
+            _BY_PREDICATE[predicate],
+        )
+        for person_id in claim["subject_ids"]:
+            person = entities.get(person_id)
+            if person and person["type"] == EntityType.PERSON.value and weight > best.get(person_id, (0,))[0]:
+                best[person_id] = (weight, role, claim)
+
+    # Same title: whoever the sources talk about more comes first.
+    mentions = Counter(
+        entity_id
+        for claim in state.get("claims", {}).values()
+        for entity_id in (*claim.get("subject_ids", []), *claim.get("reference_ids", []))
+    )
+    ranked = sorted(best.items(), key=lambda item: (-item[1][0], -mentions[item[0]], name_of(entities[item[0]])))
+    return [
+        _lead(entities[person_id], claim["claim_text"], weight, "role", kind="officer", role=role)
+        for person_id, (weight, role, claim) in ranked
+    ]
+
+
+def with_officers(state: InvestigationState, others: list[Record], limit: int) -> list[Record]:
+    """Officers first, then the other leads; the top officer is marked to be
+    searched right away when the role is senior enough."""
+    people = officers(state)[:limit]
+    if people and people[0]["score"] >= FOLLOW_FROM:
+        people[0] = {**people[0], "follow": True}
+    taken = {lead["entity_id"] for lead in people}
+    rest = [lead for lead in others if lead["entity_id"] not in taken]
+    return [*people, *rest][: max(limit, len(people))]
 
 
 def heuristic_leads(state: InvestigationState, limit: int) -> list[Record]:
@@ -96,21 +161,49 @@ def heuristic_leads(state: InvestigationState, limit: int) -> list[Record]:
     return leads[:limit]
 
 
-def briefing(state: InvestigationState) -> str:
-    """What the model gets to read: subject, candidates, source excerpts."""
-    lines = [f"Subject of the investigation: {state['query']}", "", "Candidates:"]
-    for entity, claims in candidates(state):
-        lines.append(f"- {name_of(entity)} ({entity['type']}), {len(claims)} claim(s)")
-        lines.extend(f"    · {claim['claim_text']}" for claim in claims[:3])
+def briefing(state: InvestigationState, max_chars: int | None = None) -> str:
+    """What the model gets to read: subject, candidates, source excerpts.
 
-    lines += ["", "Sources:"]
-    for source in list(state.get("sources", {}).values())[:_MAX_SOURCES]:
-        excerpt = (source.get("content") or "")[:400]
-        lines.append(f"- [{source.get('publisher') or '?'}] {source.get('title')}: {excerpt}")
+    `max_chars` is for models with a small context window: candidates come
+    best first, so what is left out is the least connected, and the source
+    excerpts only get the room the candidates leave.
+    """
+    lines = [f"Subject of the investigation: {state['query']}", "", "Candidates:"]
+    room = max_chars if max_chars is not None else float("inf")
+    room -= sum(len(line) + 1 for line in lines)
+
+    def add(block: list[str]) -> bool:
+        nonlocal room
+        size = sum(len(line) + 1 for line in block)
+        if size > room:
+            return False
+        lines.extend(block)
+        room -= size
+        return True
+
+    for entity, claims in candidates(state):
+        block = [f"- {name_of(entity)} ({entity['type']}), {len(claims)} claim(s)"]
+        block.extend(f"    · {claim['claim_text'][:300]}" for claim in claims[:3])
+        # Three quarters at most: the model should also see some of the sources.
+        if max_chars is not None and room - sum(len(line) + 1 for line in block) < max_chars / 4:
+            break
+        add(block)
+
+    if add(["", "Sources:"]):
+        for source in list(state.get("sources", {}).values())[:_MAX_SOURCES]:
+            excerpt = (source.get("content") or "")[:400]
+            if not add([f"- [{source.get('publisher') or '?'}] {source.get('title')}: {excerpt}"]):
+                break
     return "\n".join(lines)
 
 
-async def llm_leads(model: BaseChatModel, state: InvestigationState, limit: int) -> list[Record]:
+async def llm_leads(
+    model: BaseChatModel,
+    state: InvestigationState,
+    limit: int,
+    max_chars: int | None = None,
+    timeout: float | None = None,
+) -> list[Record]:
     by_name = {
         name_key(name_of(entity), entity["type"]): (entity, claims)
         for entity, claims in candidates(state)
@@ -118,12 +211,14 @@ async def llm_leads(model: BaseChatModel, state: InvestigationState, limit: int)
     if not by_name:
         return []
 
-    chooser = model.with_structured_output(LeadChoices)
-    choices = await chooser.ainvoke(
+    choices = await ask(
+        model,
+        LeadChoices,
         [
-            ("system", SYSTEM_PROMPT),
-            ("human", f"{briefing(state)}\n\nPick at most {limit} leads."),
-        ]
+            ("system", LEADS_SYSTEM),
+            ("human", f"{briefing(state, max_chars)}\n\nPick at most {limit} leads."),
+        ],
+        timeout,
     )
 
     leads = []

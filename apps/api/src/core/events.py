@@ -44,6 +44,8 @@ class EventType(StrEnum):
     # Follow-up searches proposed by the discovery stage; the user decides
     # which ones to launch.
     AGENT_LEADS = "agent.leads"
+    # The pipeline started another search by itself (data: {"run": Run, "reason"}).
+    RUN_SPAWNED = "run.spawned"
 
 
 TERMINAL = frozenset({EventType.RUN_COMPLETED, EventType.RUN_FAILED})

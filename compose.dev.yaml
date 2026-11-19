@@ -47,6 +47,12 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - SICAP_API_KEY=${SICAP_API_KEY:-}
       - LLM_MODEL=${LLM_MODEL:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - LLM_MAX_SOURCES=${LLM_MAX_SOURCES:-8}
+      # Ollama runs on the host, not in this container.
+      - LLM_BASE_URL=${LLM_BASE_URL:-http://host.docker.internal:11434}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       redis:
         condition: service_healthy

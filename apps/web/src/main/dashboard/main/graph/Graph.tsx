@@ -12,9 +12,11 @@ import {
 } from "./graph/linkRenderer";
 import { reconcileGraph, transformData } from "./lib/util";
 import {
+    isLive,
     useActiveRun,
     useInvestigation,
 } from "../../providers/investigation/store";
+import NodeMenu, { SEARCHABLE } from "./NodeMenu";
 import { useWM } from "../../utils/store";
 import { shorten } from "../../utils/util";
 import {
@@ -45,11 +47,14 @@ export default function Graph() {
     const [hoveredNode, setHoveredNode] = useState(null);
 
     const [selectedLink, setSelectedLink] = useState(null);
+    const [menu, setMenu] = useState(null); // right-click menu: { x, y, node }
 
     const [toggledLinks, setToggledLinks] = useState(() => new Set());
     const [hoveredLinkId, setHoveredLinkId] = useState(null);
 
     const run = useActiveRun();
+    const allRuns = useInvestigation((s) => s.runs);
+    const closeMenu = useCallback(() => setMenu(null), []);
     const live = run !== null;
     const liveEntities = run?.entities;
     const liveClaims = run?.claims;
@@ -283,6 +288,7 @@ export default function Graph() {
                 confidence: link.confidence,
                 status: link.status,
                 text: link.text,
+                quote: link.quote,
                 sources: sourcesOf(link),
             },
         });
@@ -327,13 +333,57 @@ export default function Graph() {
         );
     }, []);
 
+    // Right-click menu: what "Search further" would do for that node.
+    const menuChild =
+        menu && run
+            ? Object.values(allRuns).find(
+                  (r) =>
+                      r.parentKey === run.key &&
+                      r.entityId === menu.node.id &&
+                      r.phase !== "failed",
+              )
+            : null;
+    const menuBlocked = !menu
+        ? null
+        : !SEARCHABLE.has(menu.node.type)
+          ? "Only people and companies can be searched"
+          : !run?.runId
+            ? "Start a search first: this is sample data"
+            : menu.node.id === run.seedId
+              ? "This is what the search is about"
+              : null;
+
     return (
         <div className="relative w-full h-full overflow-hidden">
+            {menu && (
+                <NodeMenu
+                    menu={menu}
+                    blocked={menuBlocked}
+                    status={
+                        menuChild
+                            ? isLive(menuChild.phase)
+                                ? "Searching…"
+                                : "Already searched further"
+                            : null
+                    }
+                    onSearch={() =>
+                        useInvestigation
+                            .getState()
+                            .expand(run.key, run.entities[menu.node.id])
+                    }
+                    onDetails={() => handleNodeClick(menu.node)}
+                    onClose={closeMenu}
+                />
+            )}
             <ForceGraph3D
                 ref={graphRef}
                 graphData={graphData}
                 backgroundColor="rgba(0, 0, 0, 0)"
                 onNodeClick={handleNodeClick}
+                onNodeRightClick={(node, event) => {
+                    event.preventDefault?.();
+                    setMenu({ x: event.clientX, y: event.clientY, node });
+                }}
                 onNodeHover={setHoveredNode}
                 nodeThreeObject={(node) =>
                     createNodeObject(
