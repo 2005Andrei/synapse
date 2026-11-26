@@ -36,7 +36,7 @@ export default function DashboardNavbar() {
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                    className="bg-transparent border-none outline-none w-full text-xs placeholder-gray-600 focus:ring-0 uppercase max-width-[300px] z-999"
+                    className="bg-transparent border-none outline-none w-full text-xs placeholder-gray-600 focus:ring-0 capitalize max-width-[300px] z-999"
                 />
             </div>
 

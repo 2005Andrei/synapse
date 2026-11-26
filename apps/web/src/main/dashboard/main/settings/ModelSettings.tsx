@@ -1,24 +1,56 @@
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
+import { Check, Cloud, HardDrive, Server, Sparkles, type LucideIcon } from "lucide-react";
 import { cn } from "cn";
 import {
     loadLlmChoice,
     saveLlmChoice,
 } from "../../providers/investigation/api";
+import { Group, Row } from "./controls";
 
-const PROVIDERS = [
-    { id: "", label: "Server default", model: "", key: false },
-    { id: "ollama", label: "Local (Ollama)", model: "qwen2.5", key: false },
+const PROVIDERS: {
+    id: string;
+    label: string;
+    hint: string;
+    model: string;
+    key: boolean;
+    icon: LucideIcon;
+}[] = [
+    {
+        id: "",
+        label: "Server default",
+        hint: "Whatever the API is configured with.",
+        model: "",
+        key: false,
+        icon: Server,
+    },
+    {
+        id: "ollama",
+        label: "Local (Ollama)",
+        hint: "Runs on the worker machine. No key, nothing leaves it.",
+        model: "qwen2.5",
+        key: false,
+        icon: HardDrive,
+    },
     {
         id: "anthropic",
         label: "Anthropic",
+        hint: "Claude models, with your own API key.",
         model: "claude-opus-5-5",
         key: true,
+        icon: Sparkles,
     },
-    { id: "openai", label: "OpenAI", model: "", key: true },
+    {
+        id: "openai",
+        label: "OpenAI",
+        hint: "GPT models, with your own API key.",
+        model: "",
+        key: true,
+        icon: Cloud,
+    },
 ];
 
 const field =
-    "w-full rounded-md border border-white/15 bg-background/50 px-3 py-1.5 text-sm text-foreground outline-none transition-colors placeholder:text-foreground/30 focus:border-white/40 focus:bg-white/5";
+    "w-full rounded-md border border-white/15 bg-background/50 px-3 py-2 font-mono text-sm text-foreground outline-none transition-colors placeholder:text-foreground/30 focus:border-white/40 focus:bg-white/5";
 
 export default function ModelSettings() {
     const saved = loadLlmChoice();
@@ -48,76 +80,116 @@ export default function ModelSettings() {
                 model: `${provider}:${model.trim()}`,
                 api_key: current.key ? apiKey.trim() || undefined : undefined,
             });
-            setNote({ text: "Saved. Used by the searches you start from now on." });
+            setNote({
+                text: "Saved. Used by the searches you start from now on.",
+            });
         }
     };
 
     return (
         <form
-            className="flex flex-col gap-4"
+            className="flex flex-col gap-7"
             onSubmit={(e) => {
                 e.preventDefault();
                 save();
             }}
         >
-            <div
-                role="radiogroup"
-                aria-label="Provider"
-                className="flex flex-wrap gap-2"
-            >
-                {PROVIDERS.map((p) => {
-                    const active = p.id === provider;
-                    return (
-                        <button
-                            key={p.id}
-                            type="button"
-                            role="radio"
-                            aria-checked={active}
-                            onClick={() => pick(p.id)}
-                            className={cn(
-                                "cursor-pointer rounded-md border px-3 py-1.5 text-sm font-medium transition-all",
-                                active
-                                    ? "border-white/40 bg-white/15 text-foreground shadow-sm"
-                                    : "border-white/10 text-foreground/60 hover:border-white/30 hover:bg-white/5 hover:text-foreground",
-                            )}
-                        >
-                            {p.label}
-                        </button>
-                    );
-                })}
-            </div>
+            <section className="flex flex-col gap-2">
+                <h4 className="px-1 text-[11px] font-semibold uppercase tracking-[1.2px] text-foreground/50">
+                    Provider
+                </h4>
+                <div
+                    role="radiogroup"
+                    aria-label="Provider"
+                    className="grid grid-cols-1 gap-2 @md:grid-cols-2"
+                >
+                    {PROVIDERS.map((p) => {
+                        const active = p.id === provider;
+                        const Icon = p.icon;
+                        return (
+                            <button
+                                key={p.id}
+                                type="button"
+                                role="radio"
+                                aria-checked={active}
+                                onClick={() => pick(p.id)}
+                                className={cn(
+                                    "relative flex cursor-pointer items-start gap-3 rounded-xl border p-4 text-left transition-all",
+                                    active
+                                        ? "border-white/40 bg-white/[0.07] shadow-[inset_0_0_0_1px_rgb(255_255_255/0.08)]"
+                                        : "border-white/10 bg-white/[0.02] hover:border-white/25 hover:bg-white/[0.04]",
+                                )}
+                            >
+                                <span
+                                    className={cn(
+                                        "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border",
+                                        active
+                                            ? "border-white/30 bg-white text-background"
+                                            : "border-white/10 bg-white/5 text-foreground/60",
+                                    )}
+                                >
+                                    <Icon className="h-4 w-4" />
+                                </span>
+                                <span className="min-w-0 pr-5">
+                                    <span className="block text-sm font-medium text-foreground/90">
+                                        {p.label}
+                                    </span>
+                                    <span className="mt-0.5 block text-xs leading-relaxed text-foreground/45">
+                                        {p.hint}
+                                    </span>
+                                </span>
+                                {active && (
+                                    <Check className="absolute top-3 right-3 h-4 w-4 text-foreground/80" />
+                                )}
+                            </button>
+                        );
+                    })}
+                </div>
+            </section>
 
             {provider && (
-                <Field label="Model name">
-                    <input
-                        value={model}
-                        onChange={(e) => setModel(e.target.value)}
-                        placeholder={current.model || "model"}
-                        spellCheck={false}
-                        className={field}
-                    />
-                </Field>
-            )}
-            {current.key && (
-                <Field label="Your API key" hint="Kept in this browser only.">
-                    <input
-                        type="password"
-                        value={apiKey}
-                        onChange={(e) => setApiKey(e.target.value)}
-                        placeholder="sk-…"
-                        autoComplete="off"
-                        className={field}
-                    />
-                </Field>
-            )}
-            {provider === "ollama" && (
-                <p className="text-xs text-foreground/45">
-                    Runs on the machine the worker runs on; no key, nothing
-                    leaves it.
-                </p>
+                <Group title="Model">
+                    <Row
+                        stacked
+                        label="Model name"
+                        hint={
+                            current.model
+                                ? `Suggested: ${current.model}`
+                                : "As the provider names it."
+                        }
+                        htmlFor="settings-model-name"
+                    >
+                        <input
+                            id="settings-model-name"
+                            value={model}
+                            onChange={(e) => setModel(e.target.value)}
+                            placeholder={current.model || "model"}
+                            spellCheck={false}
+                            className={field}
+                        />
+                    </Row>
+                    {current.key && (
+                        <Row
+                            stacked
+                            label="Your API key"
+                            hint="Kept in this browser only and sent with your searches."
+                            htmlFor="settings-api-key"
+                        >
+                            <input
+                                id="settings-api-key"
+                                type="password"
+                                value={apiKey}
+                                onChange={(e) => setApiKey(e.target.value)}
+                                placeholder="sk-…"
+                                autoComplete="off"
+                                className={field}
+                            />
+                        </Row>
+                    )}
+                </Group>
             )}
 
-            <div className="flex items-center justify-between gap-3 pt-1">
+            <div className="flex items-center justify-end gap-3">
                 <span
                     aria-live="polite"
                     className={cn(
@@ -135,25 +207,5 @@ export default function ModelSettings() {
                 </button>
             </div>
         </form>
-    );
-}
-
-function Field({
-    label,
-    hint,
-    children,
-}: {
-    label: string;
-    hint?: string;
-    children: ReactNode;
-}) {
-    return (
-        <label className="flex flex-col gap-1.5">
-            <span className="flex items-baseline justify-between text-xs text-foreground/60">
-                {label}
-                {hint && <span className="text-foreground/35">{hint}</span>}
-            </span>
-            {children}
-        </label>
     );
 }
