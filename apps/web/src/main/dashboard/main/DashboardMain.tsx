@@ -1,9 +1,7 @@
 import { cn } from "cn";
 import { zoneRect } from "../utils/snap";
 import { useWM } from "../utils/store";
-import { Window } from "../utils/Window";
 import Graph from "./graph/Graph";
-import DataContainer from "./sidebars/DataContainer";
 import Sidebar from "./sidebars/Sidebar";
 import { useEffect, useRef } from "react";
 import { Dock } from "../utils/dock/Dock";
@@ -47,9 +45,6 @@ export default function DashboardMain() {
             <Sidebar />
             <Graph />
             <WindowLayer />
-            {/*<Window id="data" key={0}>
-                <DataContainer />
-            </Window>*/}
             <Dock />
         </main>
     );

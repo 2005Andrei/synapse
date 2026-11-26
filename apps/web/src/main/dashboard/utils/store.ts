@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { Desk, ZoneId } from "./snap";
+import { INVESTIGATION_WINDOW } from "../main/investigation/window";
 
 export type Win = {
     id: string;
@@ -47,18 +48,7 @@ type Store = {
 };
 
 const base = { z: 0, minimized: false, maximized: false, snap: null };
-const initial: Win[] = [
-    {
-        id: "data",
-        kind: "data",
-        title: "Data",
-        x: 0.72,
-        y: 0,
-        width: 0.25,
-        height: 1 / 1.05,
-        ...base,
-    },
-];
+const initial: Win[] = [{ ...INVESTIGATION_WINDOW, ...base }];
 
 export const useWM = create<Store>((set) => ({
     wins: Object.fromEntries(initial.map((w, i) => [w.id, { ...w, z: i + 1 }])),

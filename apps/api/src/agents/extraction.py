@@ -52,16 +52,28 @@ _MIN_QUOTE = 12
 class Mention(BaseModel):
     name: str = Field(description="Full name, as the article writes it")
     type: EntityType = Field(description="Person or Organization")
-    role: str = Field(description="Who they are according to the article, in a few words; empty if it does not say")
+    role: str = Field(
+        description="Who they are according to the article, in a few words; empty if it does not say"
+    )
 
 
 class Statement(BaseModel):
     subject: str = Field(description="Name of a listed entity")
-    predicate: Predicate | None = Field(description="The closest relation; null if none fits")
-    object: str | None = Field(description="Name of another listed entity; null for a fact about the subject alone")
-    text: str = Field(description="The statement in one sentence, in the language of the article")
-    quote: str = Field(description="The passage of the article that supports it, copied word for word")
-    alleged: bool = Field(description="True for an accusation, suspicion or someone's claim; false for what the article presents as established")
+    predicate: Predicate | None = Field(
+        description="The closest relation; null if none fits"
+    )
+    object: str | None = Field(
+        description="Name of another listed entity; null for a fact about the subject alone"
+    )
+    text: str = Field(
+        description="The statement in one sentence, in the language of the article"
+    )
+    quote: str = Field(
+        description="The passage of the article that supports it, copied word for word"
+    )
+    alleged: bool = Field(
+        description="True for an accusation, suspicion or someone's claim; false for what the article presents as established"
+    )
 
 
 class Reading(BaseModel):
@@ -74,8 +86,12 @@ class Reading(BaseModel):
 @dataclass
 class Extraction:
     entities: dict[str, Record] = field(default_factory=dict)  # new ones only
-    claims: dict[str, Record] = field(default_factory=dict)  # new, or existing with a source added
-    read: list[str] = field(default_factory=list)  # ids of the sources the model answered for
+    claims: dict[str, Record] = field(
+        default_factory=dict
+    )  # new, or existing with a source added
+    read: list[str] = field(
+        default_factory=list
+    )  # ids of the sources the model answered for
     eligible: int = 0  # readable sources not read before
     failed: int = 0
     discarded: int = 0  # statements the model made that did not pass the checks
@@ -97,7 +113,10 @@ def readable_sources(state: InvestigationState) -> list[Record]:
         and source.get("type") in _READABLE
         and len(source.get("content") or "") >= _MIN_TEXT
     ]
-    sources.sort(key=lambda source: (source.get("published_at") or "", source["id"]), reverse=True)
+    sources.sort(
+        key=lambda source: (source.get("published_at") or "", source["id"]),
+        reverse=True,
+    )
     return sources
 
 
@@ -135,13 +154,22 @@ async def extract(
             return await ask(
                 model,
                 Reading,
-                [("system", EXTRACTION_SYSTEM), ("human", _article(source, text, subject))],
+                [
+                    ("system", EXTRACTION_SYSTEM),
+                    ("human", _article(source, text, subject)),
+                ],
                 limits.timeout if left is None else min(limits.timeout, left),
             )
 
-    readings = await asyncio.gather(*(read(source) for source in chosen), return_exceptions=True)
+    readings = await asyncio.gather(
+        *(read(source) for source in chosen), return_exceptions=True
+    )
     result.out_of_time = sum(isinstance(reading, OutOfTime) for reading in readings)
-    errors = [r for r in readings if isinstance(r, BaseException) and not isinstance(r, OutOfTime)]
+    errors = [
+        r
+        for r in readings
+        if isinstance(r, BaseException) and not isinstance(r, OutOfTime)
+    ]
     if errors and len(errors) + result.out_of_time == len(chosen):
         raise errors[0]
 
@@ -150,7 +178,11 @@ async def extract(
     # (subject, predicate, object) -> claim id. Looked up by content because a
     # claim's id stops saying who it is about once resolution merges entities.
     relations = {
-        (claim["subject_ids"][0], str(claim["predicate"]), claim["reference_ids"][0]): id
+        (
+            claim["subject_ids"][0],
+            str(claim["predicate"]),
+            claim["reference_ids"][0],
+        ): id
         for id, claim in claims.items()
         if claim.get("subject_ids") and claim.get("reference_ids")
     }
@@ -180,7 +212,9 @@ def _keep(
     """Apply the checks to one reading and add what passes to `result`."""
     haystack = _squash(text)
     mentioned: dict[str, Record] = {}  # entity id -> entity record, new entities only
-    ids: dict[tuple[str, str], str] = {}  # (name key, type) -> entity id, for this article
+    ids: dict[
+        tuple[str, str], str
+    ] = {}  # (name key, type) -> entity id, for this article
 
     for mention in reading.entities:
         kind = mention.type.value
@@ -204,38 +238,58 @@ def _keep(
 
     def entity_id(name: str | None) -> str | None:
         for kind in _NAMED:
-            found = ids.get((name_key(name or "", kind), kind)) or known.get((name_key(name or "", kind), kind))
+            found = ids.get((name_key(name or "", kind), kind)) or known.get(
+                (name_key(name or "", kind), kind)
+            )
             if found:
                 kinds[found] = kind
                 return found
         return None
 
     for statement in reading.claims:
-        subject_id, object_id = entity_id(statement.subject), entity_id(statement.object)
+        subject_id, object_id = (
+            entity_id(statement.subject),
+            entity_id(statement.object),
+        )
         quote = _squash(statement.quote)
         grounded = len(quote) >= _MIN_QUOTE and quote in haystack
         if (
             not grounded
             or not subject_id
-            or (statement.object and not object_id)  # never downgrade a relation to a fact
+            or (
+                statement.object and not object_id
+            )  # never downgrade a relation to a fact
             or subject_id == object_id
             or not statement.text.strip()
         ):
             result.discarded += 1
             continue
 
-        predicate = statement.predicate.value if statement.predicate else (RELATED if object_id else STATED)
+        predicate = (
+            statement.predicate.value
+            if statement.predicate
+            else (RELATED if object_id else STATED)
+        )
         # "ACME founded Maria": small models get the direction wrong, and for
         # these relations only one direction is possible.
-        if predicate in _OVER_A_COMPANY and object_id and kinds.get(object_id) == _NAMED[0] != kinds.get(subject_id):
+        if (
+            predicate in _OVER_A_COMPANY
+            and object_id
+            and kinds.get(object_id) == _NAMED[0] != kinds.get(subject_id)
+        ):
             subject_id, object_id = object_id, subject_id
-        id = str(claim_id(subject_id, predicate, object_id or f"{source['id']}:{quote[:80]}"))
+        id = str(
+            claim_id(subject_id, predicate, object_id or f"{source['id']}:{quote[:80]}")
+        )
         if object_id:
             id = relations.setdefault((subject_id, predicate, object_id), id)
         before = result.claims.get(id) or existing_claims.get(id)
         if before:  # same relation, one more source: corroboration, not a new claim
             if source["id"] not in before["source_ids"]:
-                result.claims[id] = {**before, "source_ids": [*before["source_ids"], source["id"]]}
+                result.claims[id] = {
+                    **before,
+                    "source_ids": [*before["source_ids"], source["id"]],
+                }
             continue
 
         result.claims[id] = Claim(
@@ -247,7 +301,9 @@ def _keep(
             reference_ids=[object_id] if object_id else [],
             source_ids=[source["id"]],
             quote=statement.quote.strip(),
-            claim_status=ClaimStatus.ALLEGED if statement.alleged else ClaimStatus.REPORTED,
+            claim_status=ClaimStatus.ALLEGED
+            if statement.alleged
+            else ClaimStatus.REPORTED,
             confidence=ALLEGED_CONFIDENCE if statement.alleged else REPORTED_CONFIDENCE,
         ).model_dump(mode="json")
         for used in filter(None, (subject_id, object_id)):
@@ -274,7 +330,9 @@ def _index(entities: dict[str, Record]) -> dict[tuple[str, str], str]:
 
 def _subject(state: InvestigationState) -> str:
     seed = state.get("entities", {}).get(state.get("seed_id", ""))
-    return ((seed or {}).get("aliases") or [state.get("name_query") or state["query"]])[0]
+    return ((seed or {}).get("aliases") or [state.get("name_query") or state["query"]])[
+        0
+    ]
 
 
 def _article(source: Record, text: str, subject: str) -> str:

@@ -1,13 +1,15 @@
 import { SidebarLinks } from "./utils/SidebarLinks";
 import RunCards from "./RunCards";
-import ModelSettings from "./ModelSettings";
-import { useEffect, useRef, useState } from "react";
+import Settings from "../settings/Settings";
+import { SnapToggle } from "../../utils/SnapToggle";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { X } from "lucide-react";
 import { cn } from "cn";
 
 export default function Sidebar() {
     const [showSettings, setShowSettings] = useState(false);
+    const closeSettings = useCallback(() => setShowSettings(false), []);
     const links = [
         {
             title: "Projects",
@@ -63,7 +65,7 @@ export default function Sidebar() {
         },
         {
             title: "Settings",
-            onClick: () => setShowSettings((shown) => !shown),
+            onClick: () => setShowSettings(true),
         },
     ];
 
@@ -101,9 +103,10 @@ export default function Sidebar() {
             </div>
             <div className="shrink-0">
                 <SidebarLinks data={links} />
-                {showSettings && <ModelSettings />}
             </div>
             <RunCards />
+            <SnapToggle className="mt-4 shrink-0 px-2 text-white" />
+            {showSettings && <Settings onClose={closeSettings} />}
         </div>
     );
 }
